@@ -585,233 +585,155 @@ function initializeChart() {
 }
 
 function calculatePrediction(guesses) {
-    if (guesses.length < 2) {
+    if (guesses.length < 4) {
         return { labels: [], values: [] };
     }
     
-    // Naudojame visą istoriją - kuo daugiau duomenų, tuo geresnė sekų analizė
-    const allGuesses = guesses;
-    const n = allGuesses.length;
-    
-    if (n < 3) {
-        return { labels: [], values: [] };
-    }
-    
-    const values = allGuesses.map(g => g.coefficient);
+    const n = guesses.length;
+    const values = guesses.map(g => g.coefficient);
     const lastTime = new Date(guesses[guesses.length - 1].timestamp);
     const lastTimeMs = lastTime.getTime();
     
-    // SUGRUPUOJAME KOEFICIENTUS Į INTERVALUS (tikslesnei sekų analizei)
-    const numBins = 15;
-    const binSize = (1.0 - 0.01) / numBins;
+    // NORMALIZUOJAME DUOMENIS (centruojame aplink vidurkį)
+    const mean = values.reduce((a, b) => a + b, 0) / n;
+    const normalizedValues = values.map(v => v - mean);
     
-    function getBin(coeff) {
-        const binIndex = Math.floor((coeff - 0.01) / binSize);
-        return Math.min(Math.max(binIndex, 0), numBins - 1);
-    }
+    // AUTOCORRELATION ANALIZĖ - randame ciklinį pasikartojimą
+    // Autocorrelation skaičiuoja koreliaciją tarp signalo ir jo paties su vėlavimu
+    const maxLag = Math.min(Math.floor(n / 2), 30); // Maksimalus vėlavimas
+    const autocorrelations = [];
     
-    function getBinCenter(bin) {
-        return 0.01 + (bin + 0.5) * binSize;
-    }
-    
-    // KONVERTUOJAME REIKŠMES Į BIN'US
-    const bins = values.map(v => getBin(v));
-    
-    // ANALIZUOJAME SEKAS (PATTERNS) - kaip koeficientai pasikartoja laike
-    // 1. Perėjimų tikimybės (transition probabilities): kokie bin'ai dažniausiai seka po kitų
-    const transitions = {}; // {fromBin: {toBin: count}}
-    
-    for (let i = 0; i < bins.length - 1; i++) {
-        const fromBin = bins[i];
-        const toBin = bins[i + 1];
+    for (let lag = 1; lag <= maxLag; lag++) {
+        let correlation = 0;
+        let count = 0;
         
-        if (!transitions[fromBin]) {
-            transitions[fromBin] = {};
+        for (let i = 0; i < n - lag; i++) {
+            correlation += normalizedValues[i] * normalizedValues[i + lag];
+            count++;
         }
-        if (!transitions[fromBin][toBin]) {
-            transitions[fromBin][toBin] = 0;
-        }
-        transitions[fromBin][toBin]++;
-    }
-    
-    // 2. Analizuojame 2-3 elementų sekas (patterns)
-    const patterns2 = {}; // 2 elementų sekos
-    const patterns3 = {}; // 3 elementų sekos
-    
-    for (let i = 0; i < bins.length - 1; i++) {
-        const pattern2 = `${bins[i]}-${bins[i+1]}`;
-        patterns2[pattern2] = (patterns2[pattern2] || 0) + 1;
-    }
-    
-    for (let i = 0; i < bins.length - 2; i++) {
-        const pattern3 = `${bins[i]}-${bins[i+1]}-${bins[i+2]}`;
-        patterns3[pattern3] = (patterns3[pattern3] || 0) + 1;
-    }
-    
-    // 3. Randame dažniausiai pasitaikančias sekas
-    const sortedPatterns2 = Object.entries(patterns2)
-        .map(([pattern, count]) => ({
-            pattern,
-            count,
-            bins: pattern.split('-').map(Number),
-            frequency: count / (bins.length - 1)
-        }))
-        .sort((a, b) => b.count - a.count);
-    
-    const sortedPatterns3 = Object.entries(patterns3)
-        .map(([pattern, count]) => ({
-            pattern,
-            count,
-            bins: pattern.split('-').map(Number),
-            frequency: count / (bins.length - 2)
-        }))
-        .sort((a, b) => b.count - a.count);
-    
-    // 4. PROGNOZĖ PAGAL SEKAS
-    const lastBin = bins[bins.length - 1];
-    const secondLastBin = bins.length > 1 ? bins[bins.length - 2] : lastBin;
-    const thirdLastBin = bins.length > 2 ? bins[bins.length - 3] : secondLastBin;
-    
-    // Randame, kokios sekos prasideda nuo paskutinių bin'ų
-    const matchingPatterns2 = sortedPatterns2.filter(p => p.bins[0] === lastBin);
-    const matchingPatterns3 = sortedPatterns3.filter(p => 
-        p.bins[0] === thirdLastBin && p.bins[1] === secondLastBin && p.bins[2] === lastBin
-    );
-    
-    // Apskaičiuojame prognozuojamus bin'us pagal sekas
-    let predictedBins = [];
-    let totalWeight = 0;
-    
-    // Jei radome 3 elementų seką, kuri prasideda nuo paskutinių 3 bin'ų
-    if (matchingPatterns3.length > 0) {
-        const topPattern3 = matchingPatterns3[0];
-        // Seka jau baigta, reikia rasti, kas dažniausiai seka po šios sekos
-        const patternEnd = topPattern3.bins[2];
-        if (transitions[patternEnd]) {
-            const nextBins = Object.entries(transitions[patternEnd])
-                .map(([bin, count]) => ({
-                    bin: parseInt(bin),
-                    count,
-                    probability: count / Object.values(transitions[patternEnd]).reduce((a, b) => a + b, 0)
-                }))
-                .sort((a, b) => b.count - a.count);
-            
-            if (nextBins.length > 0) {
-                predictedBins.push({
-                    bin: nextBins[0].bin,
-                    weight: topPattern3.frequency * nextBins[0].probability * 0.5
-                });
-                totalWeight += topPattern3.frequency * nextBins[0].probability * 0.5;
-            }
+        
+        if (count > 0) {
+            // Normalizuojame autocorrelation
+            const variance = normalizedValues.reduce((sum, v) => sum + v * v, 0) / n;
+            const normalizedCorrelation = variance > 0 ? correlation / (count * variance) : 0;
+            autocorrelations.push({
+                lag: lag,
+                correlation: normalizedCorrelation
+            });
         }
     }
     
-    // Jei radome 2 elementų seką
-    if (matchingPatterns2.length > 0) {
-        matchingPatterns2.slice(0, 3).forEach(pattern => {
-            const patternEnd = pattern.bins[1];
-            if (transitions[patternEnd]) {
-                const nextBins = Object.entries(transitions[patternEnd])
-                    .map(([bin, count]) => ({
-                        bin: parseInt(bin),
-                        count,
-                        probability: count / Object.values(transitions[patternEnd]).reduce((a, b) => a + b, 0)
-                    }))
-                    .sort((a, b) => b.count - a.count);
-                
-                if (nextBins.length > 0) {
-                    const weight = pattern.frequency * nextBins[0].probability * 0.3;
-                    predictedBins.push({
-                        bin: nextBins[0].bin,
-                        weight
-                    });
-                    totalWeight += weight;
+    // RANDAME DOMINUOJANČIUS CIKLUS (periodiškumą)
+    // Ieškome didelių autocorrelation verčių
+    const significantCycles = autocorrelations
+        .filter(ac => Math.abs(ac.correlation) > 0.3) // Reikšmingi ciklai
+        .sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
+        .slice(0, 3); // Top 3 ciklai
+    
+    // Apskaičiuojame vidutinį laiką tarp spėjimų (minutėmis)
+    const timeDiffs = [];
+    for (let i = 1; i < guesses.length; i++) {
+        const time1 = new Date(guesses[i-1].timestamp).getTime();
+        const time2 = new Date(guesses[i].timestamp).getTime();
+        const diffMs = time2 - time1;
+        if (diffMs > 0 && diffMs < 10 * 60 * 1000) {
+            timeDiffs.push(diffMs / 1000 / 60);
+        }
+    }
+    const avgTimeBetweenGuesses = timeDiffs.length > 0
+        ? timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length
+        : 1;
+    
+    // CIKLO PARAMETRAI
+    let cyclePeriod = null; // Ciklo periodas (spėjimų skaičius)
+    let cycleFrequency = null; // Ciklo dažnis (ciklai per spėjimą)
+    let cycleAmplitude = 0; // Ciklo amplitudė (svyravimo dydis)
+    let cyclePhase = 0; // Ciklo fazė (kur esame cikle)
+    
+    if (significantCycles.length > 0) {
+        // Naudojame stipriausią ciklą
+        const mainCycle = significantCycles[0];
+        cyclePeriod = mainCycle.lag; // Periodas spėjimų skaičiumi
+        cycleFrequency = 1 / cyclePeriod; // Dažnis
+        
+        // Apskaičiuojame amplitudę iš ciklo
+        // Amplitudė = maksimumas - minimumas per ciklą
+        const cycleLength = cyclePeriod;
+        const cycles = Math.floor(n / cycleLength);
+        
+        if (cycles > 0) {
+            const cycleValues = [];
+            for (let c = 0; c < cycles; c++) {
+                const cycleStart = c * cycleLength;
+                const cycleEnd = Math.min(cycleStart + cycleLength, n);
+                const cycleData = values.slice(cycleStart, cycleEnd);
+                if (cycleData.length > 0) {
+                    const cycleMax = Math.max(...cycleData);
+                    const cycleMin = Math.min(...cycleData);
+                    cycleValues.push({ max: cycleMax, min: cycleMin, amplitude: cycleMax - cycleMin });
                 }
             }
-        });
-    }
-    
-    // Jei turime perėjimus nuo paskutinio bin'o
-    if (transitions[lastBin]) {
-        const nextBins = Object.entries(transitions[lastBin])
-            .map(([bin, count]) => ({
-                bin: parseInt(bin),
-                count,
-                probability: count / Object.values(transitions[lastBin]).reduce((a, b) => a + b, 0)
-            }))
-            .sort((a, b) => b.count - a.count);
-        
-        if (nextBins.length > 0) {
-            const weight = nextBins[0].probability * 0.2;
-            predictedBins.push({
-                bin: nextBins[0].bin,
-                weight
-            });
-            totalWeight += weight;
+            
+            if (cycleValues.length > 0) {
+                cycleAmplitude = cycleValues.reduce((sum, c) => sum + c.amplitude, 0) / cycleValues.length;
+            }
         }
+        
+        // Apskaičiuojame fazę - kur esame cikle dabar
+        const positionInCycle = n % cyclePeriod;
+        cyclePhase = (positionInCycle / cyclePeriod) * 2 * Math.PI; // Radianais
+    } else {
+        // Jei nėra aiškaus ciklo, naudojame vidutinį svyravimą kaip amplitudę
+        const maxValue = Math.max(...values);
+        const minValue = Math.min(...values);
+        cycleAmplitude = (maxValue - minValue) / 2;
+        cyclePeriod = n; // Visas periodas kaip ciklas
+        cycleFrequency = 1 / cyclePeriod;
     }
     
-    // Apskaičiuojame svertinį prognozuojamą bin'ą
-    let predictedBin = lastBin; // Default - paskutinis bin'as
-    if (predictedBins.length > 0 && totalWeight > 0) {
-        const weightedBin = predictedBins.reduce((sum, p) => sum + p.bin * p.weight, 0) / totalWeight;
-        predictedBin = Math.round(weightedBin);
-        predictedBin = Math.max(0, Math.min(numBins - 1, predictedBin));
-    }
-    
-    const basePredictedValue = getBinCenter(predictedBin);
-    
-    // Apskaičiuojame vidutinį pokytį tarp bin'ų istorijoje
-    const binChanges = [];
-    for (let i = 1; i < bins.length; i++) {
-        binChanges.push(bins[i] - bins[i-1]);
-    }
-    const avgBinChange = binChanges.length > 0 
-        ? binChanges.reduce((a, b) => a + b, 0) / binChanges.length 
-        : 0;
+    // VIDUTINĖ REIKŠMĖ IR TRENDAS
+    const lastValue = values[values.length - 1];
+    const secondLastValue = values.length > 1 ? values[values.length - 2] : lastValue;
+    const trend = lastValue - secondLastValue;
     
     // Generuojame 15 min prognozę (kas 1 minutę = 15 taškų)
     const predictionLabels = [];
     const predictionValues = [];
     
-    // Skaičiuojame vidutinį laiką tarp spėjimų
-    const timeDiffs = [];
-    for (let i = 1; i < allGuesses.length; i++) {
-        const time1 = new Date(allGuesses[i-1].timestamp).getTime();
-        const time2 = new Date(allGuesses[i].timestamp).getTime();
-        const diffMs = time2 - time1;
-        if (diffMs > 0 && diffMs < 10 * 60 * 1000) {
-            timeDiffs.push(diffMs / 1000 / 60); // Minutės
-        }
-    }
-    const avgTimeBetweenGuesses = timeDiffs.length > 0
-        ? timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length
-        : 1; // Default: 1 minutė
-    
-    // Paskutinė reikšmė
-    const lastValue = values[values.length - 1];
-    
     for (let i = 1; i <= 15; i++) {
         const futureTime = new Date(lastTimeMs + i * 60 * 1000);
         predictionLabels.push(futureTime.toLocaleString('lt-LT'));
         
-        // Prognozuojama reikšmė pagal sekų pasikartojimą
-        // Kiek spėjimų bus per 15 min (apytiksliai)
-        const guessesInFuture = Math.floor(i / avgTimeBetweenGuesses);
+        // Kiek spėjimų bus per i minučių
+        const guessesInFuture = i / avgTimeBetweenGuesses;
         
-        // Prognozuojame bin'ą pagal sekas
-        let futureBin = predictedBin;
-        if (guessesInFuture > 0 && avgBinChange !== 0) {
-            // Pritaikome vidutinį pokytį
-            futureBin = Math.round(predictedBin + avgBinChange * guessesInFuture * 0.3);
-            futureBin = Math.max(0, Math.min(numBins - 1, futureBin));
+        // PROGNOZĖ PAGAL CIKLINĮ PASIKARTOJIMĄ
+        let predictedValue = mean; // Pradedame nuo vidurkio
+        
+        if (cyclePeriod && cycleAmplitude > 0) {
+            // Apskaičiuojame naują fazę ateityje
+            const futurePhase = cyclePhase + (guessesInFuture * 2 * Math.PI * cycleFrequency);
+            
+            // Sinusoidinė prognozė pagal ciklą
+            // Naudojame sinusą, kad gautume ciklinį pasikartojimą
+            const cycleComponent = Math.sin(futurePhase) * cycleAmplitude;
+            predictedValue = mean + cycleComponent;
+            
+            // Pritaikome trendą
+            predictedValue += trend * guessesInFuture * 0.1;
+        } else {
+            // Jei nėra aiškaus ciklo, naudojame tiesinę prognozę su svyravimu
+            predictedValue = lastValue + trend * guessesInFuture;
+            
+            // Pridedame nedidelį svyravimą pagal amplitudę
+            if (cycleAmplitude > 0) {
+                const randomPhase = (guessesInFuture * 0.1) % (2 * Math.PI);
+                predictedValue += Math.sin(randomPhase) * cycleAmplitude * 0.3;
+            }
         }
         
-        let predictedValue = getBinCenter(futureBin);
-        
-        // Pritaikome paskutinę reikšmę ir vidutinį pokytį
-        const trend = lastValue - (values.length > 1 ? values[values.length - 2] : lastValue);
-        predictedValue = predictedValue * 0.7 + lastValue * 0.2 + (lastValue + trend) * 0.1;
+        // Pritaikome paskutinę reikšmę (30% svoris)
+        predictedValue = predictedValue * 0.7 + lastValue * 0.3;
         
         // Ribojame į 0.01 - 1 diapazoną
         const clampedValue = Math.max(0.01, Math.min(1, predictedValue));
