@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sėkmės Koeficiento Nustatymas</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Registracijos/Prisijungimo forma -->
+        <div id="auth-section" class="auth-section">
+            <h1>Sėkmės Koeficiento Nustatymas</h1>
+            <div class="auth-tabs">
+                <button class="tab-btn active" onclick="showTab('login')">Prisijungti</button>
+                <button class="tab-btn" onclick="showTab('register')">Registruotis</button>
+            </div>
+            
+            <div id="login-tab" class="tab-content active">
+                <input type="text" id="login-username" placeholder="Vartotojo vardas" required>
+                <input type="password" id="login-password" placeholder="Slaptažodis" required>
+                <button onclick="login()">Prisijungti</button>
+            </div>
+            
+            <div id="register-tab" class="tab-content">
+                <input type="text" id="register-username" placeholder="Vartotojo vardas" required>
+                <input type="password" id="register-password" placeholder="Slaptažodis" required>
+                <input type="email" id="register-email" placeholder="El. paštas" required>
+                <button onclick="register()">Registruotis</button>
+            </div>
+            
+            <div id="auth-error" class="error-message"></div>
+        </div>
+
+        <!-- Pagrindinė žaidimo sekcija -->
+        <div id="game-section" class="game-section hidden">
+            <div class="header">
+                <h2>Sveiki, <span id="current-username"></span>!</h2>
+                <button onclick="logout()" class="logout-btn">Atsijungti</button>
+            </div>
+
+            <div class="stats-panel">
+                <div class="stat-item">
+                    <label>Dabartinis sėkmės koeficientas:</label>
+                    <span id="current-coefficient" class="coefficient-value">0.01</span>
+                </div>
+                <div class="stat-item">
+                    <label>Iš viso spėjimų:</label>
+                    <span id="total-guesses">0</span>
+                </div>
+                <div class="stat-item">
+                    <label>Vidutinis koeficientas:</label>
+                    <span id="average-coefficient">-</span>
+                </div>
+                <div class="stat-item">
+                    <label>Iš eilės atspėta:</label>
+                    <span id="streak-count">0</span>
+                </div>
+            </div>
+
+            <div class="game-board-container">
+                <div id="color-indicator" class="color-indicator"></div>
+                <div id="game-board" class="game-board"></div>
+            </div>
+
+            <div class="feedback-panel">
+                <div id="guess-feedback" class="guess-feedback"></div>
+            </div>
+
+            <div class="chart-section">
+                <h3>Spėjimų istorija ir prognozė</h3>
+                <canvas id="coefficient-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
