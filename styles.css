@@ -399,3 +399,86 @@ body {
     color: #e74c3c;
     font-size: 14px;
 }
+
+/* Mėnulio fazės panel */
+.moon-phase-panel {
+    margin-top: 30px;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+}
+
+.moon-phase-panel h3 {
+    color: white;
+    margin-bottom: 15px;
+    text-align: center;
+    font-size: 20px;
+}
+
+.moon-phase-content {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    min-height: 100px;
+}
+
+.moon-phase-info {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.moon-emoji {
+    font-size: 64px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.moon-details {
+    flex: 1;
+}
+
+.moon-details p {
+    margin: 8px 0;
+    font-size: 16px;
+    color: #333;
+}
+
+.moon-details strong {
+    color: #667eea;
+}
+
+.moon-api-info {
+    text-align: center;
+    color: #666;
+}
+
+.moon-api-info p {
+    margin: 10px 0;
+}
+
+.moon-api-info a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.moon-api-info a:hover {
+    text-decoration: underline;
+}
+
+.moon-api-info code {
+    background: #f4f4f4;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    color: #e74c3c;
+}
+
+.loading {
+    text-align: center;
+    color: #999;
+    padding: 20px;
+    font-style: italic;
+}

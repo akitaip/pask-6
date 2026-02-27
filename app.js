@@ -167,6 +167,122 @@ function showGameSection() {
     updateStats();
     startGameCycle();
     initializeChart();
+    fetchMoonPhase(); // Užkrauname mėnulio fazės informaciją
+}
+
+// Mėnulio fazės funkcijos
+function calculateMoonPhase() {
+    const date = new Date();
+    let year = date.getFullYear();
+    let month = date.getMonth() + 1;
+    const day = date.getDate();
+    
+    // Mėnulio fazės skaičiavimas (lunation skaičius)
+    let c = 0, e = 0, jd = 0, b = 0;
+    
+    if (month < 3) {
+        year--;
+        month += 12;
+    }
+    
+    ++month;
+    c = 365.25 * year;
+    e = 30.6 * month;
+    jd = c + e + day - 694039.09; // jd yra bendras dienų skaičius
+    jd /= 29.5305882; // padalinti iš mėnulio ciklo ilgio
+    b = parseInt(jd); // atkurti sveikąją dalį
+    jd -= b; // atkurti trupmeninę dalį
+    b = Math.round(jd * 8); // padauginti iš 8 ir suapvalinti
+    
+    if (b >= 8) {
+        b = 0;
+    }
+    
+    // Apskaičiuoti apšviestumą
+    const phase = (jd * 29.5305882);
+    const illumination = (1 - Math.cos(2 * Math.PI * jd)) / 2 * 100;
+    
+    return {
+        phaseIndex: b,
+        illumination: Math.round(illumination * 10) / 10,
+        daysSinceNew: Math.round(phase * 10) / 10
+    };
+}
+
+async function fetchMoonPhase() {
+    const moonPhaseContent = document.getElementById('moon-phase-content');
+    const moonPhaseError = document.getElementById('moon-phase-error');
+    const phaseToIndex = {
+        'New Moon': 0,
+        'Waxing Crescent': 1,
+        'First Quarter': 2,
+        'Waxing Gibbous': 3,
+        'Full Moon': 4,
+        'Waning Gibbous': 5,
+        'Last Quarter': 6,
+        'Waning Crescent': 7
+    };
+    
+    try {
+        moonPhaseContent.innerHTML = '<div class="loading">Kraunama...</div>';
+        moonPhaseError.textContent = '';
+
+        // Dabartinė fazė su timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 sekundės timeout
+        
+        const response = await fetch('https://api.phaseofthemoontoday.com/v1/current', {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`API klaida: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const moonData = {
+            phaseIndex: phaseToIndex[data.phase] ?? calculateMoonPhase().phaseIndex,
+            illumination: typeof data.illumination === 'number' ? Math.round(data.illumination * 10) / 10 : 0,
+            daysSinceNew: typeof data.days_since_new === 'number' ? Math.round(data.days_since_new * 10) / 10 : 0
+        };
+
+        displayMoonPhase(moonData);
+    } catch (error) {
+        console.error('Mėnulio fazės API klaida, naudojamas lokalus skaičiavimas:', error);
+        const fallbackMoonData = calculateMoonPhase();
+        displayMoonPhase(fallbackMoonData);
+        moonPhaseError.textContent = '';
+    }
+}
+
+function displayMoonPhase(data) {
+    const moonPhaseContent = document.getElementById('moon-phase-content');
+    
+    // Fazių pavadinimai ir emoji
+    const phases = [
+        { name: 'Jaunatis', emoji: '🌑' },
+        { name: 'Jaunatis (augantis pjautuvas)', emoji: '🌒' },
+        { name: 'Pirmas ketvirtis', emoji: '🌓' },
+        { name: 'Augantis kuprė', emoji: '🌔' },
+        { name: 'Pilnatis', emoji: '🌕' },
+        { name: 'Mažėjantis kuprė', emoji: '🌖' },
+        { name: 'Paskutinis ketvirtis', emoji: '🌗' },
+        { name: 'Senatis (mažėjantis pjautuvas)', emoji: '🌘' }
+    ];
+    
+    const currentPhase = phases[data.phaseIndex];
+    
+    moonPhaseContent.innerHTML = `
+        <div class="moon-phase-info">
+            <div class="moon-emoji">${currentPhase.emoji}</div>
+            <div class="moon-details">
+                <p><strong>Fazė:</strong> ${currentPhase.name}</p>
+                <p><strong>Apšviestumas:</strong> ${data.illumination}%</p>
+                <p><strong>Dienų nuo jaunaties:</strong> ${data.daysSinceNew}</p>
+            </div>
+        </div>
+    `;
 }
 
 // Autentifikacija
