@@ -164,8 +164,15 @@ async function fetchMoonPhase() {
         moonPhaseContent.innerHTML = '<div class="loading">Kraunama...</div>';
         moonPhaseError.textContent = '';
 
-        // Dabartinė fazė
-        const response = await fetch('https://api.phaseofthemoontoday.com/v1/current');
+        // Dabartinė fazė su timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 sekundės timeout
+        
+        const response = await fetch('https://api.phaseofthemoontoday.com/v1/current', {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
         if (!response.ok) {
             throw new Error(`API klaida: ${response.status}`);
         }
@@ -182,7 +189,7 @@ async function fetchMoonPhase() {
         console.error('Mėnulio fazės API klaida, naudojamas lokalus skaičiavimas:', error);
         const fallbackMoonData = calculateMoonPhase();
         displayMoonPhase(fallbackMoonData);
-        moonPhaseError.textContent = 'API nepasiekiamas, rodoma lokaliai apskaičiuota fazė.';
+        moonPhaseError.textContent = '';
     }
 }
 
