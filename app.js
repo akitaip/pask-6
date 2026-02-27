@@ -56,11 +56,74 @@ let gameState = {
 // Chart.js grafikas
 let coefficientChart = null;
 
+// Euromillions API (https://euromillions.api.pedromealha.dev, dokumentacija: https://euromillios-api.readme.io)
+const EUROMILLIONS_API_BASE = 'https://euromillions.api.pedromealha.dev';
+
 // Inicializacija
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     setupEventListeners();
+    loadLuckyNumbers();
 });
+
+// Šio mėnesio laimingiausi 10 skaičių iš Euromillions API
+async function loadLuckyNumbers() {
+    const loadingEl = document.getElementById('lucky-numbers-loading');
+    const listEl = document.getElementById('lucky-numbers-list');
+    const errorEl = document.getElementById('lucky-numbers-error');
+    if (!loadingEl || !listEl || !errorEl) return;
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startStr = firstDay.toISOString().slice(0, 10);
+    const endStr = lastDay.toISOString().slice(0, 10);
+    const url = `${EUROMILLIONS_API_BASE}/v1/draws?dates=${startStr},${endStr}`;
+
+    try {
+        listEl.classList.add('hidden');
+        errorEl.classList.add('hidden');
+        loadingEl.classList.remove('hidden');
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`API atsakymas: ${res.status}`);
+        const data = await res.json();
+        const draws = Array.isArray(data) ? data : (data.draws || data.data || []);
+
+        const countByNumber = {};
+        for (const draw of draws) {
+            const numbers = draw && draw.numbers ? draw.numbers : [];
+            for (const n of numbers) {
+                const key = Number(n);
+                if (!isNaN(key)) countByNumber[key] = (countByNumber[key] || 0) + 1;
+            }
+        }
+
+        const sorted = Object.entries(countByNumber)
+            .map(([num, count]) => ({ num: parseInt(num, 10), count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10);
+
+        loadingEl.classList.add('hidden');
+        if (sorted.length === 0) {
+            listEl.innerHTML = '<p class="lucky-no-data">Šio mėnesio traukimų dar nėra.</p>';
+        } else {
+            listEl.innerHTML = sorted
+                .map(({ num, count }, i) =>
+                    `<span class="lucky-item" title="Pasikartojimų: ${count}">${i + 1}. ${num} <small>(${count})</small></span>`
+                )
+                .join('');
+        }
+        listEl.classList.remove('hidden');
+    } catch (err) {
+        loadingEl.classList.add('hidden');
+        listEl.classList.add('hidden');
+        errorEl.textContent = 'Nepavyko gauti duomenų: ' + (err.message || 'nežinoma klaida');
+        errorEl.classList.remove('hidden');
+    }
+}
 
 function checkAuth() {
     const currentUser = localStorage.getItem('current_user');

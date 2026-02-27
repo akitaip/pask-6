@@ -73,6 +73,22 @@
                 <canvas id="coefficient-chart"></canvas>
             </div>
         </div>
+
+        <!-- Euromillions API – laimingiausi skaičiai šio mėnesio -->
+        <footer class="euromillions-footer">
+            <div class="euromillions-content">
+                <p class="euromillions-credit">
+                    Duomenys: <a href="https://euromillions.api.pedromealha.dev" target="_blank" rel="noopener">Euromillions API</a>
+                    (<a href="https://euromillios-api.readme.io" target="_blank" rel="noopener">dokumentacija</a>)
+                </p>
+                <h3 class="lucky-title">Laimingiausi 10 skaičių šio mėnesio (Euromillions)</h3>
+                <div id="lucky-numbers-container" class="lucky-numbers-container">
+                    <span id="lucky-numbers-loading" class="lucky-loading">Kraunama…</span>
+                    <div id="lucky-numbers-list" class="lucky-numbers-list hidden"></div>
+                    <p id="lucky-numbers-error" class="lucky-error hidden"></p>
+                </div>
+            </div>
+        </footer>
     </div>
 
     <script src="app.js"></script>
