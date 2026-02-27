@@ -333,7 +333,7 @@ body {
 
 .lucky-title {
     font-size: 18px;
-    color: #667eea;
+    color: #000000;
     margin-bottom: 12px;
     text-align: center;
 }
@@ -357,11 +357,24 @@ body {
     align-items: center;
 }
 
+.lucky-numbers-list .lucky-item-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 8px;
+}
+
+.lucky-numbers-list .lucky-number {
+    font-weight: bold;
+    font-size: 15px;
+    color: #333;
+}
+
 .lucky-numbers-list .lucky-item {
     display: inline-flex;
     align-items: baseline;
     padding: 6px 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #000000;
     color: white;
     border-radius: 8px;
     font-weight: bold;

@@ -112,7 +112,7 @@ async function loadLuckyNumbers() {
         } else {
             listEl.innerHTML = sorted
                 .map(({ num, count }, i) =>
-                    `<span class="lucky-item" title="Pasikartojimų: ${count}">${i + 1}. ${num} <small>(${count})</small></span>`
+                    `<span class="lucky-item-wrapper"><span class="lucky-number">${i + 1}.</span><span class="lucky-item" title="Pasikartojimų: ${count}">${num}</span></span>`
                 )
                 .join('');
         }
