@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
-<body>
+<body class="loading-app">
     <div class="container">
         <!-- Registracijos/Prisijungimo forma -->
         <div id="auth-section" class="auth-section">
@@ -18,7 +18,7 @@
             </div>
             
             <div id="login-tab" class="tab-content active">
-                <input type="text" id="login-username" placeholder="Vartotojo vardas" required>
+                <input type="email" id="login-email" placeholder="El. paštas" required>
                 <input type="password" id="login-password" placeholder="Slaptažodis" required>
                 <button onclick="login()">Prisijungti</button>
             </div>
@@ -36,7 +36,15 @@
         <!-- Pagrindinė žaidimo sekcija -->
         <div id="game-section" class="game-section hidden">
             <div class="header">
-                <h2>Sveiki, <span id="current-username"></span>!</h2>
+                <div class="header-greeting">
+                    <h2>Sveiki, <span id="current-username"></span>!</h2>
+                </div>
+                <div class="moon-phase-panel moon-phase-compact">
+                    <div id="moon-phase-content" class="moon-phase-content">
+                        <div class="loading">Kraunama...</div>
+                    </div>
+                    <div id="moon-phase-error" class="error-message"></div>
+                </div>
                 <button onclick="logout()" class="logout-btn">Atsijungti</button>
             </div>
 
@@ -57,15 +65,6 @@
                     <label>Iš eilės atspėta:</label>
                     <span id="streak-count">0</span>
                 </div>
-            </div>
-
-            <!-- Mėnulio fazė -->
-            <div class="moon-phase-panel">
-                <h3>🌙 Mėnulio fazė</h3>
-                <div id="moon-phase-content" class="moon-phase-content">
-                    <div class="loading">Kraunama...</div>
-                </div>
-                <div id="moon-phase-error" class="error-message"></div>
             </div>
 
             <div class="game-board-container">
@@ -100,6 +99,6 @@
         </footer>
     </div>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

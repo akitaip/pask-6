@@ -1,46 +1,20 @@
-// Duomenų bazė (localStorage)
-const DB = {
-    users: 'success_coefficient_users',
-    guesses: 'success_coefficient_guesses',
-    userStats: 'success_coefficient_user_stats',
-    
-    getUsers() {
-        const data = localStorage.getItem(this.users);
-        return data ? JSON.parse(data) : {};
-    },
-    
-    saveUsers(users) {
-        localStorage.setItem(this.users, JSON.stringify(users));
-    },
-    
-    getGuesses(username) {
-        const data = localStorage.getItem(`${this.guesses}_${username}`);
-        return data ? JSON.parse(data) : [];
-    },
-    
-    saveGuesses(username, guesses) {
-        localStorage.setItem(`${this.guesses}_${username}`, JSON.stringify(guesses));
-    },
-    
-    addGuess(username, guess) {
-        const guesses = this.getGuesses(username);
-        guesses.push(guess);
-        this.saveGuesses(username, guesses);
-    },
-    
-    getUserStats(username) {
-        const data = localStorage.getItem(`${this.userStats}_${username}`);
-        return data ? JSON.parse(data) : { streak: 0, currentCoefficient: 0.01 };
-    },
-    
-    saveUserStats(username, stats) {
-        localStorage.setItem(`${this.userStats}_${username}`, JSON.stringify(stats));
-    }
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const SUPABASE_CONFIG_ENDPOINT = '/api/config';
+const BOARD_ROWS = 5;
+const BOARD_COLUMNS = 20;
+const BOARD_SIZE = BOARD_ROWS * BOARD_COLUMNS;
+const DEFAULT_USER_STATS = {
+    streak: 0,
+    currentCoefficient: 0.01
 };
+
+let supabase = null;
 
 // Žaidimo būsena
 let gameState = {
     currentUser: null,
+    currentUsername: '',
     board: [],
     targetNumber: null,
     targetRow: null,
@@ -56,17 +30,102 @@ let gameState = {
 // Chart.js grafikas
 let coefficientChart = null;
 
-// Euromillions API (https://euromillions.api.pedromealha.dev, dokumentacija: https://euromillios-api.readme.io)
+// Euromillions API
 const EUROMILLIONS_API_BASE = 'https://euromillions.api.pedromealha.dev';
 
-// Inicializacija
-document.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
-    setupEventListeners();
-    loadLuckyNumbers();
-});
+window.showTab = showTab;
+window.register = register;
+window.login = login;
+window.logout = logout;
 
-// Šio mėnesio laimingiausi 10 skaičių iš Euromillions API
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    initializeApp();
+}
+
+async function initializeApp() {
+    try {
+        setAuthBusy(true);
+        await initializeSupabase();
+        setupEventListeners();
+        await checkAuth();
+    } catch (error) {
+        console.error('Inicializacijos klaida:', error);
+        showAuthSection();
+        showError('Nepavyko inicializuoti Supabase. Patikrinkite Vercel aplinkos kintamuosius.');
+    } finally {
+        loadLuckyNumbers();
+        setAuthBusy(false);
+    }
+}
+
+async function initializeSupabase() {
+    const response = await fetch(SUPABASE_CONFIG_ENDPOINT, {
+        cache: 'no-store'
+    });
+
+    if (!response.ok) {
+        throw new Error(`Config API atsakymas: ${response.status}`);
+    }
+
+    const config = await response.json();
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+        throw new Error('Nerasti SUPABASE_URL arba SUPABASE_ANON_KEY');
+    }
+
+    supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+        auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+        }
+    });
+}
+
+function setupEventListeners() {
+    document.getElementById('login-email').addEventListener('keydown', submitAuthOnEnter);
+    document.getElementById('login-password').addEventListener('keydown', submitAuthOnEnter);
+    document.getElementById('register-username').addEventListener('keydown', submitAuthOnEnter);
+    document.getElementById('register-email').addEventListener('keydown', submitAuthOnEnter);
+    document.getElementById('register-password').addEventListener('keydown', submitAuthOnEnter);
+}
+
+function submitAuthOnEnter(event) {
+    if (event.key !== 'Enter') {
+        return;
+    }
+
+    const activeTab = document.querySelector('.tab-content.active');
+    if (activeTab && activeTab.id === 'login-tab') {
+        login();
+        return;
+    }
+
+    register();
+}
+
+function setAuthBusy(isBusy) {
+    const authControls = document.querySelectorAll('#auth-section input, #auth-section button');
+    authControls.forEach((control) => {
+        control.disabled = isBusy;
+    });
+}
+
+function showTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((btn) => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach((content) => content.classList.remove('active'));
+
+    if (tab === 'login') {
+        document.querySelector('.tab-btn').classList.add('active');
+        document.getElementById('login-tab').classList.add('active');
+        return;
+    }
+
+    document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    document.getElementById('register-tab').classList.add('active');
+}
+
 async function loadLuckyNumbers() {
     const loadingEl = document.getElementById('lucky-numbers-loading');
     const listEl = document.getElementById('lucky-numbers-list');
@@ -97,12 +156,12 @@ async function loadLuckyNumbers() {
             const numbers = draw && draw.numbers ? draw.numbers : [];
             for (const n of numbers) {
                 const key = Number(n);
-                if (!isNaN(key)) countByNumber[key] = (countByNumber[key] || 0) + 1;
+                if (!Number.isNaN(key)) countByNumber[key] = (countByNumber[key] || 0) + 1;
             }
         }
 
         const sorted = Object.entries(countByNumber)
-            .map(([num, count]) => ({ num: parseInt(num, 10), count }))
+            .map(([num, count]) => ({ num: Number.parseInt(num, 10), count }))
             .sort((a, b) => b.count - a.count)
             .slice(0, 10);
 
@@ -111,8 +170,8 @@ async function loadLuckyNumbers() {
             listEl.innerHTML = '<p class="lucky-no-data">Šio mėnesio traukimų dar nėra.</p>';
         } else {
             listEl.innerHTML = sorted
-                .map(({ num, count }, i) =>
-                    `<span class="lucky-item-wrapper"><span class="lucky-number">${i + 1}.</span><span class="lucky-item" title="Pasikartojimų: ${count}">${num}</span></span>`
+                .map(({ num, count }, index) =>
+                    `<span class="lucky-item-wrapper"><span class="lucky-number">${index + 1}.</span><span class="lucky-item" title="Pasikartojimų: ${count}">${num}</span></span>`
                 )
                 .join('');
         }
@@ -125,83 +184,94 @@ async function loadLuckyNumbers() {
     }
 }
 
-function checkAuth() {
-    const currentUser = localStorage.getItem('current_user');
-    if (currentUser) {
-        gameState.currentUser = currentUser;
-        showGameSection();
-    } else {
-        showAuthSection();
+async function checkAuth() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+        throw error;
     }
+
+    const session = data.session;
+    if (!session?.user) {
+        showAuthSection();
+        return;
+    }
+
+    gameState.currentUser = session.user;
+    await hydrateCurrentUserProfile();
+    await showGameSection();
 }
 
-function setupEventListeners() {
-    // Tab perjungimas
-    window.showTab = function(tab) {
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-        
-        if (tab === 'login') {
-            document.querySelector('.tab-btn').classList.add('active');
-            document.getElementById('login-tab').classList.add('active');
-        } else {
-            document.querySelectorAll('.tab-btn')[1].classList.add('active');
-            document.getElementById('register-tab').classList.add('active');
-        }
-    };
+async function hydrateCurrentUserProfile() {
+    if (!gameState.currentUser) {
+        gameState.currentUsername = '';
+        return;
+    }
+
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', gameState.currentUser.id)
+        .maybeSingle();
+
+    if (error) {
+        console.error('Nepavyko užkrauti profilio:', error);
+    }
+
+    gameState.currentUsername = data?.username || gameState.currentUser.user_metadata?.username || gameState.currentUser.email?.split('@')[0] || 'Žaidėjas';
 }
 
 function showAuthSection() {
+    stopGameCycle();
+    destroyChart();
     document.getElementById('auth-section').classList.remove('hidden');
     document.getElementById('game-section').classList.add('hidden');
 }
 
-function showGameSection() {
+async function showGameSection() {
     document.getElementById('auth-section').classList.add('hidden');
     document.getElementById('game-section').classList.remove('hidden');
-    document.getElementById('current-username').textContent = gameState.currentUser;
-    
-    // Užkrauname tik šio vartotojo duomenis
-    loadUserData();
+    document.getElementById('current-username').textContent = gameState.currentUsername;
+
+    await loadUserData();
     initializeGame();
     updateStats();
     startGameCycle();
     initializeChart();
-    fetchMoonPhase(); // Užkrauname mėnulio fazės informaciją
+    fetchMoonPhase();
 }
 
-// Mėnulio fazės funkcijos
 function calculateMoonPhase() {
     const date = new Date();
     let year = date.getFullYear();
     let month = date.getMonth() + 1;
     const day = date.getDate();
-    
-    // Mėnulio fazės skaičiavimas (lunation skaičius)
-    let c = 0, e = 0, jd = 0, b = 0;
-    
+
+    let c = 0;
+    let e = 0;
+    let jd = 0;
+    let b = 0;
+
     if (month < 3) {
         year--;
         month += 12;
     }
-    
+
     ++month;
     c = 365.25 * year;
     e = 30.6 * month;
-    jd = c + e + day - 694039.09; // jd yra bendras dienų skaičius
-    jd /= 29.5305882; // padalinti iš mėnulio ciklo ilgio
-    b = parseInt(jd); // atkurti sveikąją dalį
-    jd -= b; // atkurti trupmeninę dalį
-    b = Math.round(jd * 8); // padauginti iš 8 ir suapvalinti
-    
+    jd = c + e + day - 694039.09;
+    jd /= 29.5305882;
+    b = Number.parseInt(jd, 10);
+    jd -= b;
+    b = Math.round(jd * 8);
+
     if (b >= 8) {
         b = 0;
     }
-    
-    // Apskaičiuoti apšviestumą
-    const phase = (jd * 29.5305882);
-    const illumination = (1 - Math.cos(2 * Math.PI * jd)) / 2 * 100;
-    
+
+    const phase = jd * 29.5305882;
+    const illumination = ((1 - Math.cos(2 * Math.PI * jd)) / 2) * 100;
+
     return {
         phaseIndex: b,
         illumination: Math.round(illumination * 10) / 10,
@@ -222,20 +292,19 @@ async function fetchMoonPhase() {
         'Last Quarter': 6,
         'Waning Crescent': 7
     };
-    
+
     try {
         moonPhaseContent.innerHTML = '<div class="loading">Kraunama...</div>';
         moonPhaseError.textContent = '';
 
-        // Dabartinė fazė su timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 sekundės timeout
-        
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+
         const response = await fetch('https://api.phaseofthemoontoday.com/v1/current', {
             signal: controller.signal
         });
         clearTimeout(timeoutId);
-        
+
         if (!response.ok) {
             throw new Error(`API klaida: ${response.status}`);
         }
@@ -258,8 +327,6 @@ async function fetchMoonPhase() {
 
 function displayMoonPhase(data) {
     const moonPhaseContent = document.getElementById('moon-phase-content');
-    
-    // Fazių pavadinimai ir emoji
     const phases = [
         { name: 'Jaunatis', emoji: '🌑' },
         { name: 'Jaunatis (augantis pjautuvas)', emoji: '🌒' },
@@ -270,9 +337,9 @@ function displayMoonPhase(data) {
         { name: 'Paskutinis ketvirtis', emoji: '🌗' },
         { name: 'Senatis (mažėjantis pjautuvas)', emoji: '🌘' }
     ];
-    
+
     const currentPhase = phases[data.phaseIndex];
-    
+
     moonPhaseContent.innerHTML = `
         <div class="moon-phase-info">
             <div class="moon-emoji">${currentPhase.emoji}</div>
@@ -285,98 +352,135 @@ function displayMoonPhase(data) {
     `;
 }
 
-// Autentifikacija
-function register() {
+async function register() {
     const username = document.getElementById('register-username').value.trim();
     const password = document.getElementById('register-password').value;
     const email = document.getElementById('register-email').value.trim();
-    
+
     if (!username || !password || !email) {
         showError('Prašome užpildyti visus laukus');
         return;
     }
-    
-    const users = DB.getUsers();
-    if (users[username]) {
-        showError('Vartotojas jau egzistuoja');
-        return;
-    }
-    
-    users[username] = {
-        password: password, // Realiai reikėtų hashinti
-        email: email,
-        createdAt: new Date().toISOString()
-    };
-    
-    DB.saveUsers(users);
-    
-    // Inicializuojame naujo vartotojo statistiką
-    DB.saveUserStats(username, {
-        streak: 0,
-        currentCoefficient: 0.01
-    });
-    
-    showError('', 'success');
-    setTimeout(() => {
+
+    try {
+        setAuthBusy(true);
+        showError('');
+
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
+                    username
+                }
+            }
+        });
+
+        if (error) {
+            throw error;
+        }
+
         document.getElementById('register-username').value = '';
         document.getElementById('register-password').value = '';
         document.getElementById('register-email').value = '';
+
+        if (data.session?.user) {
+            gameState.currentUser = data.session.user;
+            await hydrateCurrentUserProfile();
+            showError('', 'success');
+            await showGameSection();
+            return;
+        }
+
+        showError('Registracija sėkminga. Patikrinkite el. paštą ir patvirtinkite paskyrą.', 'success');
         showTab('login');
-    }, 1000);
+    } catch (error) {
+        console.error('Registracijos klaida:', error);
+        showError(normalizeAuthError(error.message || 'Registracija nepavyko'));
+    } finally {
+        setAuthBusy(false);
+    }
 }
 
-function login() {
-    const username = document.getElementById('login-username').value.trim();
+async function login() {
+    const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
-    
-    if (!username || !password) {
-        showError('Prašome įvesti vartotojo vardą ir slaptažodį');
+
+    if (!email || !password) {
+        showError('Prašome įvesti el. paštą ir slaptažodį');
         return;
     }
-    
-    const users = DB.getUsers();
-    if (!users[username] || users[username].password !== password) {
-        showError('Neteisingas vartotojo vardas arba slaptažodis');
-        return;
+
+    try {
+        setAuthBusy(true);
+        showError('');
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) {
+            throw error;
+        }
+
+        gameState.currentUser = data.user;
+        await hydrateCurrentUserProfile();
+        showError('', 'success');
+        await showGameSection();
+    } catch (error) {
+        console.error('Prisijungimo klaida:', error);
+        showError(normalizeAuthError(error.message || 'Prisijungimas nepavyko'));
+    } finally {
+        setAuthBusy(false);
     }
-    
-    gameState.currentUser = username;
-    localStorage.setItem('current_user', username);
-    showError('', 'success');
-    setTimeout(() => {
-        showGameSection();
-    }, 500);
 }
 
-function logout() {
-    // Išsaugome vartotojo statistiką prieš atsijungiant
-    if (gameState.currentUser) {
-        DB.saveUserStats(gameState.currentUser, {
-            streak: gameState.streak,
-            currentCoefficient: gameState.currentCoefficient
-        });
+async function logout() {
+    try {
+        if (gameState.currentUser) {
+            await saveUserStats();
+        }
+
+        await supabase.auth.signOut();
+    } catch (error) {
+        console.error('Atsijungimo klaida:', error);
+    } finally {
+        resetGameState();
+        showAuthSection();
+        showTab('login');
+        showError('');
     }
-    
-    // Išvalome žaidimo būseną
-    gameState.currentUser = null;
-    gameState.guesses = [];
-    gameState.totalGuesses = 0;
-    gameState.streak = 0;
-    gameState.currentCoefficient = 0.01;
-    
-    localStorage.removeItem('current_user');
-    if (gameState.changeTimer) {
-        clearInterval(gameState.changeTimer);
-        gameState.changeTimer = null;
+}
+
+function resetGameState() {
+    gameState = {
+        currentUser: null,
+        currentUsername: '',
+        board: [],
+        targetNumber: null,
+        targetRow: null,
+        targetCol: null,
+        currentCoefficient: 0.01,
+        totalGuesses: 0,
+        streak: 0,
+        lastGuessTime: null,
+        changeTimer: null,
+        guesses: []
+    };
+}
+
+function normalizeAuthError(message) {
+    if (message.includes('User already registered')) {
+        return 'Vartotojas su šiuo el. paštu jau egzistuoja';
     }
-    
-    // Išvalome grafiką
-    if (coefficientChart) {
-        coefficientChart.destroy();
-        coefficientChart = null;
+    if (message.includes('Invalid login credentials')) {
+        return 'Neteisingas el. paštas arba slaptažodis';
     }
-    
-    showAuthSection();
+    if (message.includes('Email not confirmed')) {
+        return 'El. paštas dar nepatvirtintas';
+    }
+    return message;
 }
 
 function showError(message, type = 'error') {
@@ -385,7 +489,6 @@ function showError(message, type = 'error') {
     errorEl.style.color = type === 'success' ? '#4caf50' : '#e74c3c';
 }
 
-// Žaidimo inicializacija
 function initializeGame() {
     generateBoard();
     renderBoard();
@@ -400,15 +503,14 @@ function initializeColorIndicator() {
 }
 
 function generateBoard() {
-    // Generuojame nesikartojančius skaičius nuo 0 iki 99
-    const numbers = Array.from({ length: 100 }, (_, i) => i);
+    const numbers = Array.from({ length: BOARD_SIZE }, (_, index) => index);
     shuffleArray(numbers);
-    
+
     gameState.board = [];
-    for (let i = 0; i < 10; i++) {
-        gameState.board[i] = [];
-        for (let j = 0; j < 10; j++) {
-            gameState.board[i][j] = numbers[i * 10 + j];
+    for (let row = 0; row < BOARD_ROWS; row++) {
+        gameState.board[row] = [];
+        for (let col = 0; col < BOARD_COLUMNS; col++) {
+            gameState.board[row][col] = numbers[row * BOARD_COLUMNS + col];
         }
     }
 }
@@ -423,31 +525,32 @@ function shuffleArray(array) {
 function renderBoard() {
     const boardEl = document.getElementById('game-board');
     boardEl.innerHTML = '';
-    
-    for (let i = 0; i < 10; i++) {
-        for (let j = 0; j < 10; j++) {
+    boardEl.style.gridTemplateColumns = `repeat(${BOARD_COLUMNS}, minmax(0, 1fr))`;
+
+    for (let row = 0; row < BOARD_ROWS; row++) {
+        for (let col = 0; col < BOARD_COLUMNS; col++) {
             const cell = document.createElement('div');
             cell.className = 'game-cell';
-            cell.textContent = gameState.board[i][j];
-            cell.dataset.row = i;
-            cell.dataset.col = j;
-            cell.onclick = () => handleCellClick(i, j);
+            cell.textContent = gameState.board[row][col];
+            cell.dataset.row = row;
+            cell.dataset.col = col;
+            cell.onclick = () => {
+                handleCellClick(row, col);
+            };
             boardEl.appendChild(cell);
         }
     }
 }
 
 function selectNewTarget() {
-    gameState.targetRow = Math.floor(Math.random() * 10);
-    gameState.targetCol = Math.floor(Math.random() * 10);
+    gameState.targetRow = Math.floor(Math.random() * BOARD_ROWS);
+    gameState.targetCol = Math.floor(Math.random() * BOARD_COLUMNS);
     gameState.targetNumber = gameState.board[gameState.targetRow][gameState.targetCol];
 }
 
 function startGameCycle() {
-    // Pirmas spalvos keitimas
+    stopGameCycle();
     changeColor();
-    
-    // Keičiame kas 3 sekundes
     gameState.changeTimer = setInterval(() => {
         changeColor();
         selectNewTarget();
@@ -455,60 +558,61 @@ function startGameCycle() {
     }, 3000);
 }
 
+function stopGameCycle() {
+    if (gameState.changeTimer) {
+        clearInterval(gameState.changeTimer);
+        gameState.changeTimer = null;
+    }
+}
+
 function changeColor() {
     const indicator = document.getElementById('color-indicator');
     const board = document.getElementById('game-board');
-    
-    // Atsitiktinė spalva
     const hue = Math.floor(Math.random() * 360);
     indicator.style.backgroundColor = `hsl(${hue}, 70%, 50%)`;
-    
-    // Animacija
+
     indicator.classList.add('changing');
     board.classList.add('changing');
-    
+
     setTimeout(() => {
         indicator.classList.remove('changing');
         board.classList.remove('changing');
     }, 500);
 }
 
-// Spėjimo apdorojimas
-function handleCellClick(row, col) {
+async function handleCellClick(row, col) {
+    if (!gameState.currentUser) {
+        return;
+    }
+
     const clickedNumber = gameState.board[row][col];
     const now = new Date();
-    
+
     let points = 0;
-    let feedback = [];
-    
-    // Tikriname skaičių
+    const feedback = [];
+
     if (clickedNumber === gameState.targetNumber) {
         points += 1;
         feedback.push('Skaičius: ✓');
     } else {
         feedback.push('Skaičius: ✗');
     }
-    
-    // Tikriname eilutę
+
     if (row === gameState.targetRow) {
         points += 0.1;
         feedback.push('Eilutė: ✓');
     } else {
         feedback.push('Eilutė: ✗');
     }
-    
-    // Tikriname stulpelį
+
     if (col === gameState.targetCol) {
         points += 0.1;
         feedback.push('Stulpelis: ✓');
     } else {
         feedback.push('Stulpelis: ✗');
     }
-    
-    // Sėkmės koeficiento skaičiavimas
+
     let coefficient = calculateCoefficient(points);
-    
-    // 2 kartus iš eilės atspėti skaičių - padidina 4 kartus
     const numberCorrect = clickedNumber === gameState.targetNumber;
     if (numberCorrect) {
         gameState.streak++;
@@ -519,20 +623,17 @@ function handleCellClick(row, col) {
     } else {
         gameState.streak = 0;
     }
-    
-    // Ribojame koeficientą
+
     coefficient = Math.max(0.01, Math.min(1, coefficient));
-    
-    // Atnaujiname koeficientą
+
     gameState.currentCoefficient = coefficient;
     gameState.totalGuesses++;
     gameState.lastGuessTime = now;
-    
-    // Išsaugome spėjimą (tik šio vartotojo)
+
     const guess = {
         timestamp: now.toISOString(),
-        coefficient: coefficient,
-        points: points,
+        coefficient,
+        points,
         guessedNumber: clickedNumber,
         targetNumber: gameState.targetNumber,
         guessedRow: row,
@@ -540,56 +641,46 @@ function handleCellClick(row, col) {
         guessedCol: col,
         targetCol: gameState.targetCol
     };
-    
+
     gameState.guesses.push(guess);
-    DB.addGuess(gameState.currentUser, guess);
-    
-    // Išsaugome vartotojo statistiką
-    DB.saveUserStats(gameState.currentUser, {
-        streak: gameState.streak,
-        currentCoefficient: gameState.currentCoefficient
-    });
-    
-    // Rodyti atsiliepimą
+
+    try {
+        await Promise.all([
+            saveGuess(guess),
+            saveUserStats()
+        ]);
+    } catch (error) {
+        console.error('Nepavyko išsaugoti spėjimo arba statistikos:', error);
+    }
+
     showFeedback(feedback, points);
-    
-    // Atnaujinti statistiką
     updateStats();
     updateChart();
-    
-    // Pažymėti langelį
     markCell(row, col, points > 0);
-    
-    // Po kiekvieno spėjimo keičiame skaičių tvarką lentelėje
+
     setTimeout(() => {
         generateBoard();
         renderBoard();
         selectNewTarget();
         changeColor();
-    }, 500); // Trumpas delėjimas, kad vartotojas matytų rezultatą
+    }, 500);
 }
 
 function calculateCoefficient(points) {
-    // Bazinis koeficientas pagal taškus
-    // Maksimalus taškų skaičius: 1 + 0.1 + 0.1 = 1.2
-    // Normalizuojame į 0.01 - 1 diapazoną
     const normalizedPoints = points / 1.2;
-    const baseCoefficient = 0.01 + (normalizedPoints * 0.99);
-    
-    // Jei yra streak, jau padauginta aukščiau
-    return baseCoefficient;
+    return 0.01 + (normalizedPoints * 0.99);
 }
 
 function markCell(row, col, correct) {
     const cells = document.querySelectorAll('.game-cell');
-    const cellIndex = row * 10 + col;
+    const cellIndex = row * BOARD_COLUMNS + col;
     const cell = cells[cellIndex];
-    
+
     cell.classList.add('clicked');
     if (!correct) {
         cell.classList.add('wrong');
     }
-    
+
     setTimeout(() => {
         cell.classList.remove('clicked', 'wrong');
     }, 2000);
@@ -598,7 +689,7 @@ function markCell(row, col, correct) {
 function showFeedback(feedback, points) {
     const feedbackEl = document.getElementById('guess-feedback');
     feedbackEl.innerHTML = feedback.join(' | ');
-    
+
     if (points >= 1) {
         feedbackEl.className = 'guess-feedback success';
     } else if (points > 0) {
@@ -614,62 +705,136 @@ function clearFeedback() {
     feedbackEl.className = 'guess-feedback';
 }
 
-// Statistika
-function loadUserData() {
-    if (!gameState.currentUser) return;
-    
-    // Užkrauname tik šio vartotojo spėjimus
-    const guesses = DB.getGuesses(gameState.currentUser);
+async function loadUserData() {
+    if (!gameState.currentUser) {
+        return;
+    }
+
+    const [guessesResult, statsResult] = await Promise.all([
+        supabase
+            .from('guesses')
+            .select('created_at, coefficient, points, guessed_number, target_number, guessed_row, target_row, guessed_col, target_col')
+            .order('created_at', { ascending: true }),
+        supabase
+            .from('user_stats')
+            .select('streak, current_coefficient')
+            .eq('user_id', gameState.currentUser.id)
+            .maybeSingle()
+    ]);
+
+    if (guessesResult.error) {
+        throw guessesResult.error;
+    }
+    if (statsResult.error) {
+        throw statsResult.error;
+    }
+
+    const guesses = (guessesResult.data || []).map((guess) => ({
+        timestamp: guess.created_at,
+        coefficient: Number(guess.coefficient),
+        points: Number(guess.points),
+        guessedNumber: guess.guessed_number,
+        targetNumber: guess.target_number,
+        guessedRow: guess.guessed_row,
+        targetRow: guess.target_row,
+        guessedCol: guess.guessed_col,
+        targetCol: guess.target_col
+    }));
+
+    const userStats = statsResult.data
+        ? {
+            streak: statsResult.data.streak,
+            currentCoefficient: Number(statsResult.data.current_coefficient)
+        }
+        : DEFAULT_USER_STATS;
+
     gameState.guesses = guesses;
     gameState.totalGuesses = guesses.length;
-    
-    // Užkrauname vartotojo statistiką
-    const userStats = DB.getUserStats(gameState.currentUser);
-    
+
     if (guesses.length > 0) {
         gameState.currentCoefficient = guesses[guesses.length - 1].coefficient;
-        
-        // Apskaičiuojame streak iš istorijos (paskutiniai spėjimai, kur skaičius buvo teisingas)
         gameState.streak = calculateStreakFromHistory(guesses);
-    } else {
-        gameState.currentCoefficient = userStats.currentCoefficient || 0.01;
-        gameState.streak = userStats.streak || 0;
+        return;
+    }
+
+    gameState.currentCoefficient = userStats.currentCoefficient || DEFAULT_USER_STATS.currentCoefficient;
+    gameState.streak = userStats.streak || DEFAULT_USER_STATS.streak;
+}
+
+async function saveGuess(guess) {
+    if (!gameState.currentUser) {
+        return;
+    }
+
+    const { error } = await supabase
+        .from('guesses')
+        .insert({
+            user_id: gameState.currentUser.id,
+            guessed_number: guess.guessedNumber,
+            target_number: guess.targetNumber,
+            guessed_row: guess.guessedRow,
+            target_row: guess.targetRow,
+            guessed_col: guess.guessedCol,
+            target_col: guess.targetCol,
+            points: guess.points,
+            coefficient: guess.coefficient,
+            created_at: guess.timestamp
+        });
+
+    if (error) {
+        throw error;
+    }
+}
+
+async function saveUserStats() {
+    if (!gameState.currentUser) {
+        return;
+    }
+
+    const { error } = await supabase
+        .from('user_stats')
+        .upsert({
+            user_id: gameState.currentUser.id,
+            streak: gameState.streak,
+            current_coefficient: gameState.currentCoefficient,
+            updated_at: new Date().toISOString()
+        }, {
+            onConflict: 'user_id'
+        });
+
+    if (error) {
+        throw error;
     }
 }
 
 function calculateStreakFromHistory(guesses) {
     if (guesses.length === 0) return 0;
-    
+
     let streak = 0;
-    // Einu nuo paskutinio spėjimo atgal
     for (let i = guesses.length - 1; i >= 0; i--) {
         const guess = guesses[i];
-        // Tikriname ar skaičius buvo teisingas
         if (guess.guessedNumber === guess.targetNumber) {
             streak++;
         } else {
-            break; // Sustabdom, jei rastas neteisingas
+            break;
         }
     }
-    
+
     return streak;
 }
 
 function updateStats() {
-    document.getElementById('current-coefficient').textContent = 
-        gameState.currentCoefficient.toFixed(3);
+    document.getElementById('current-coefficient').textContent = gameState.currentCoefficient.toFixed(3);
     document.getElementById('total-guesses').textContent = gameState.totalGuesses;
     document.getElementById('streak-count').textContent = gameState.streak;
-    
-    // Vidutinis koeficientas po 25, 50, 75, 100 spėjimų
+
     const milestones = [25, 50, 75, 100];
     const avgEl = document.getElementById('average-coefficient');
-    
+
     if (gameState.totalGuesses >= 25) {
-        const avg = gameState.guesses.reduce((sum, g) => sum + g.coefficient, 0) / gameState.guesses.length;
+        const avg = gameState.guesses.reduce((sum, guess) => sum + guess.coefficient, 0) / gameState.guesses.length;
         avgEl.textContent = avg.toFixed(3);
-        
-        // Rodyti milestone pranešimą
+
         if (milestones.includes(gameState.totalGuesses)) {
             setTimeout(() => {
                 alert(`Pasiektas ${gameState.totalGuesses} spėjimų milestone! Vidutinis koeficientas: ${avg.toFixed(3)}`);
@@ -680,21 +845,18 @@ function updateStats() {
     }
 }
 
-// Grafikas
 function initializeChart() {
+    destroyChart();
     const ctx = document.getElementById('coefficient-chart').getContext('2d');
-    
-    // Naudojame tik šio vartotojo spėjimus
+
     const guesses = gameState.guesses;
-    const labels = guesses.map(g => {
-        const date = new Date(g.timestamp);
+    const labels = guesses.map((guess) => {
+        const date = new Date(guess.timestamp);
         return date.toLocaleString('lt-LT');
     });
-    const coefficients = guesses.map(g => g.coefficient);
-    
-    // Pridedame prognozę 15 min į priekį (tik šio vartotojo duomenimis)
+    const coefficients = guesses.map((guess) => guess.coefficient);
     const predictionData = calculatePrediction(guesses);
-    
+
     coefficientChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -763,162 +925,140 @@ function initializeChart() {
     });
 }
 
+function destroyChart() {
+    if (coefficientChart) {
+        coefficientChart.destroy();
+        coefficientChart = null;
+    }
+}
+
 function calculatePrediction(guesses) {
     if (guesses.length < 4) {
         return { labels: [], values: [] };
     }
-    
+
     const n = guesses.length;
-    const values = guesses.map(g => g.coefficient);
+    const values = guesses.map((guess) => guess.coefficient);
     const lastTime = new Date(guesses[guesses.length - 1].timestamp);
     const lastTimeMs = lastTime.getTime();
-    
-    // NORMALIZUOJAME DUOMENIS (centruojame aplink vidurkį)
+
     const mean = values.reduce((a, b) => a + b, 0) / n;
-    const normalizedValues = values.map(v => v - mean);
-    
-    // AUTOCORRELATION ANALIZĖ - randame ciklinį pasikartojimą
-    // Autocorrelation skaičiuoja koreliaciją tarp signalo ir jo paties su vėlavimu
-    const maxLag = Math.min(Math.floor(n / 2), 30); // Maksimalus vėlavimas
+    const normalizedValues = values.map((value) => value - mean);
+
+    const maxLag = Math.min(Math.floor(n / 2), 30);
     const autocorrelations = [];
-    
+
     for (let lag = 1; lag <= maxLag; lag++) {
         let correlation = 0;
         let count = 0;
-        
+
         for (let i = 0; i < n - lag; i++) {
             correlation += normalizedValues[i] * normalizedValues[i + lag];
             count++;
         }
-        
+
         if (count > 0) {
-            // Normalizuojame autocorrelation
-            const variance = normalizedValues.reduce((sum, v) => sum + v * v, 0) / n;
+            const variance = normalizedValues.reduce((sum, value) => sum + value * value, 0) / n;
             const normalizedCorrelation = variance > 0 ? correlation / (count * variance) : 0;
             autocorrelations.push({
-                lag: lag,
+                lag,
                 correlation: normalizedCorrelation
             });
         }
     }
-    
-    // RANDAME DOMINUOJANČIUS CIKLUS (periodiškumą)
-    // Ieškome didelių autocorrelation verčių
+
     const significantCycles = autocorrelations
-        .filter(ac => Math.abs(ac.correlation) > 0.3) // Reikšmingi ciklai
+        .filter((entry) => Math.abs(entry.correlation) > 0.3)
         .sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
-        .slice(0, 3); // Top 3 ciklai
-    
-    // Apskaičiuojame vidutinį laiką tarp spėjimų (minutėmis)
+        .slice(0, 3);
+
     const timeDiffs = [];
     for (let i = 1; i < guesses.length; i++) {
-        const time1 = new Date(guesses[i-1].timestamp).getTime();
+        const time1 = new Date(guesses[i - 1].timestamp).getTime();
         const time2 = new Date(guesses[i].timestamp).getTime();
         const diffMs = time2 - time1;
         if (diffMs > 0 && diffMs < 10 * 60 * 1000) {
             timeDiffs.push(diffMs / 1000 / 60);
         }
     }
+
     const avgTimeBetweenGuesses = timeDiffs.length > 0
         ? timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length
         : 1;
-    
-    // CIKLO PARAMETRAI
-    let cyclePeriod = null; // Ciklo periodas (spėjimų skaičius)
-    let cycleFrequency = null; // Ciklo dažnis (ciklai per spėjimą)
-    let cycleAmplitude = 0; // Ciklo amplitudė (svyravimo dydis)
-    let cyclePhase = 0; // Ciklo fazė (kur esame cikle)
-    
+
+    let cyclePeriod = null;
+    let cycleFrequency = null;
+    let cycleAmplitude = 0;
+    let cyclePhase = 0;
+
     if (significantCycles.length > 0) {
-        // Naudojame stipriausią ciklą
         const mainCycle = significantCycles[0];
-        cyclePeriod = mainCycle.lag; // Periodas spėjimų skaičiumi
-        cycleFrequency = 1 / cyclePeriod; // Dažnis
-        
-        // Apskaičiuojame amplitudę iš ciklo
-        // Amplitudė = maksimumas - minimumas per ciklą
+        cyclePeriod = mainCycle.lag;
+        cycleFrequency = 1 / cyclePeriod;
+
         const cycleLength = cyclePeriod;
         const cycles = Math.floor(n / cycleLength);
-        
+
         if (cycles > 0) {
             const cycleValues = [];
-            for (let c = 0; c < cycles; c++) {
-                const cycleStart = c * cycleLength;
+            for (let cycleIndex = 0; cycleIndex < cycles; cycleIndex++) {
+                const cycleStart = cycleIndex * cycleLength;
                 const cycleEnd = Math.min(cycleStart + cycleLength, n);
                 const cycleData = values.slice(cycleStart, cycleEnd);
                 if (cycleData.length > 0) {
                     const cycleMax = Math.max(...cycleData);
                     const cycleMin = Math.min(...cycleData);
-                    cycleValues.push({ max: cycleMax, min: cycleMin, amplitude: cycleMax - cycleMin });
+                    cycleValues.push({ amplitude: cycleMax - cycleMin });
                 }
             }
-            
+
             if (cycleValues.length > 0) {
-                cycleAmplitude = cycleValues.reduce((sum, c) => sum + c.amplitude, 0) / cycleValues.length;
+                cycleAmplitude = cycleValues.reduce((sum, cycle) => sum + cycle.amplitude, 0) / cycleValues.length;
             }
         }
-        
-        // Apskaičiuojame fazę - kur esame cikle dabar
+
         const positionInCycle = n % cyclePeriod;
-        cyclePhase = (positionInCycle / cyclePeriod) * 2 * Math.PI; // Radianais
+        cyclePhase = (positionInCycle / cyclePeriod) * 2 * Math.PI;
     } else {
-        // Jei nėra aiškaus ciklo, naudojame vidutinį svyravimą kaip amplitudę
         const maxValue = Math.max(...values);
         const minValue = Math.min(...values);
         cycleAmplitude = (maxValue - minValue) / 2;
-        cyclePeriod = n; // Visas periodas kaip ciklas
+        cyclePeriod = n;
         cycleFrequency = 1 / cyclePeriod;
     }
-    
-    // VIDUTINĖ REIKŠMĖ IR TRENDAS
+
     const lastValue = values[values.length - 1];
     const secondLastValue = values.length > 1 ? values[values.length - 2] : lastValue;
     const trend = lastValue - secondLastValue;
-    
-    // Generuojame 15 min prognozę (kas 1 minutę = 15 taškų)
+
     const predictionLabels = [];
     const predictionValues = [];
-    
+
     for (let i = 1; i <= 15; i++) {
         const futureTime = new Date(lastTimeMs + i * 60 * 1000);
         predictionLabels.push(futureTime.toLocaleString('lt-LT'));
-        
-        // Kiek spėjimų bus per i minučių
+
         const guessesInFuture = i / avgTimeBetweenGuesses;
-        
-        // PROGNOZĖ PAGAL CIKLINĮ PASIKARTOJIMĄ
-        let predictedValue = mean; // Pradedame nuo vidurkio
-        
+
+        let predictedValue = mean;
+
         if (cyclePeriod && cycleAmplitude > 0) {
-            // Apskaičiuojame naują fazę ateityje
             const futurePhase = cyclePhase + (guessesInFuture * 2 * Math.PI * cycleFrequency);
-            
-            // Sinusoidinė prognozė pagal ciklą
-            // Naudojame sinusą, kad gautume ciklinį pasikartojimą
             const cycleComponent = Math.sin(futurePhase) * cycleAmplitude;
             predictedValue = mean + cycleComponent;
-            
-            // Pritaikome trendą
             predictedValue += trend * guessesInFuture * 0.1;
         } else {
-            // Jei nėra aiškaus ciklo, naudojame tiesinę prognozę su svyravimu
             predictedValue = lastValue + trend * guessesInFuture;
-            
-            // Pridedame nedidelį svyravimą pagal amplitudę
             if (cycleAmplitude > 0) {
                 const randomPhase = (guessesInFuture * 0.1) % (2 * Math.PI);
                 predictedValue += Math.sin(randomPhase) * cycleAmplitude * 0.3;
             }
         }
-        
-        // Pritaikome paskutinę reikšmę (30% svoris)
+
         predictedValue = predictedValue * 0.7 + lastValue * 0.3;
-        
-        // Ribojame į 0.01 - 1 diapazoną
-        const clampedValue = Math.max(0.01, Math.min(1, predictedValue));
-        predictionValues.push(clampedValue);
+        predictionValues.push(Math.max(0.01, Math.min(1, predictedValue)));
     }
-    
+
     return {
         labels: predictionLabels,
         values: predictionValues
@@ -927,23 +1067,17 @@ function calculatePrediction(guesses) {
 
 function updateChart() {
     if (!coefficientChart) return;
-    
-    // Naudojame tik šio vartotojo spėjimus
+
     const guesses = gameState.guesses;
-    const labels = guesses.map(g => {
-        const date = new Date(g.timestamp);
+    const labels = guesses.map((guess) => {
+        const date = new Date(guess.timestamp);
         return date.toLocaleString('lt-LT');
     });
-    const coefficients = guesses.map(g => g.coefficient);
-    
-    // Prognozė tik šio vartotojo duomenimis
+    const coefficients = guesses.map((guess) => guess.coefficient);
     const predictionData = calculatePrediction(guesses);
-    
+
     coefficientChart.data.labels = [...labels, ...predictionData.labels];
-    // Istorija - tik realūs duomenys
     coefficientChart.data.datasets[0].data = [...coefficients, ...new Array(predictionData.values.length).fill(null)];
-    // Prognozė - tik prognozuojami duomenys
     coefficientChart.data.datasets[1].data = [...new Array(coefficients.length).fill(null), ...predictionData.values];
-    
     coefficientChart.update();
 }
