@@ -11,7 +11,6 @@ const DEFAULT_USER_STATS = {
 
 let supabase = null;
 
-// Žaidimo būsena
 let gameState = {
     currentUser: null,
     currentUsername: '',
@@ -27,11 +26,7 @@ let gameState = {
     guesses: []
 };
 
-// Chart.js grafikas
 let coefficientChart = null;
-
-// Euromillions API
-const EUROMILLIONS_API_BASE = 'https://euromillions.api.pedromealha.dev';
 
 window.showTab = showTab;
 window.register = register;
@@ -55,7 +50,6 @@ async function initializeApp() {
         showAuthSection();
         showError('Nepavyko inicializuoti Supabase. Patikrinkite Vercel aplinkos kintamuosius.');
     } finally {
-        loadLuckyNumbers();
         setAuthBusy(false);
     }
 }
@@ -124,64 +118,6 @@ function showTab(tab) {
 
     document.querySelectorAll('.tab-btn')[1].classList.add('active');
     document.getElementById('register-tab').classList.add('active');
-}
-
-async function loadLuckyNumbers() {
-    const loadingEl = document.getElementById('lucky-numbers-loading');
-    const listEl = document.getElementById('lucky-numbers-list');
-    const errorEl = document.getElementById('lucky-numbers-error');
-    if (!loadingEl || !listEl || !errorEl) return;
-
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startStr = firstDay.toISOString().slice(0, 10);
-    const endStr = lastDay.toISOString().slice(0, 10);
-    const url = `${EUROMILLIONS_API_BASE}/v1/draws?dates=${startStr},${endStr}`;
-
-    try {
-        listEl.classList.add('hidden');
-        errorEl.classList.add('hidden');
-        loadingEl.classList.remove('hidden');
-
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`API atsakymas: ${res.status}`);
-        const data = await res.json();
-        const draws = Array.isArray(data) ? data : (data.draws || data.data || []);
-
-        const countByNumber = {};
-        for (const draw of draws) {
-            const numbers = draw && draw.numbers ? draw.numbers : [];
-            for (const n of numbers) {
-                const key = Number(n);
-                if (!Number.isNaN(key)) countByNumber[key] = (countByNumber[key] || 0) + 1;
-            }
-        }
-
-        const sorted = Object.entries(countByNumber)
-            .map(([num, count]) => ({ num: Number.parseInt(num, 10), count }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 10);
-
-        loadingEl.classList.add('hidden');
-        if (sorted.length === 0) {
-            listEl.innerHTML = '<p class="lucky-no-data">Šio mėnesio traukimų dar nėra.</p>';
-        } else {
-            listEl.innerHTML = sorted
-                .map(({ num, count }, index) =>
-                    `<span class="lucky-item-wrapper"><span class="lucky-number">${index + 1}.</span><span class="lucky-item" title="Pasikartojimų: ${count}">${num}</span></span>`
-                )
-                .join('');
-        }
-        listEl.classList.remove('hidden');
-    } catch (err) {
-        loadingEl.classList.add('hidden');
-        listEl.classList.add('hidden');
-        errorEl.textContent = 'Nepavyko gauti duomenų: ' + (err.message || 'nežinoma klaida');
-        errorEl.classList.remove('hidden');
-    }
 }
 
 async function checkAuth() {
