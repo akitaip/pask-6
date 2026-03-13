@@ -246,6 +246,7 @@ async function showGameSection() {
     startGameCycle();
     initializeChart();
     fetchMoonPhase();
+    fetchSolarActivity();
 
     if (pendingAuthSuccessMessage) {
         alert(pendingAuthSuccessMessage);
@@ -361,6 +362,126 @@ function displayMoonPhase(data) {
                 <p><strong>Apšviestumas:</strong> ${data.illumination}%</p>
                 <p><strong>Dienų nuo jaunaties:</strong> ${data.daysSinceNew}</p>
             </div>
+        </div>
+    `;
+}
+
+async function fetchNoaaJson(url, timeoutMs = 5000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, {
+            signal: controller.signal
+        });
+
+        if (!response.ok) {
+            throw new Error(`NOAA API klaida: ${response.status}`);
+        }
+
+        return await response.json();
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function getLatestArrayEntry(payload) {
+    if (!Array.isArray(payload) || payload.length === 0) {
+        return null;
+    }
+
+    return payload[payload.length - 1] || null;
+}
+
+function getNumericValue(record, keys) {
+    if (!record || typeof record !== 'object') {
+        return null;
+    }
+
+    for (const key of keys) {
+        if (!(key in record)) {
+            continue;
+        }
+
+        const value = Number(record[key]);
+        if (Number.isFinite(value)) {
+            return value;
+        }
+    }
+
+    return null;
+}
+
+function formatMetric(value, digits = 2) {
+    if (!Number.isFinite(value)) {
+        return 'N/A';
+    }
+    return value.toFixed(digits);
+}
+
+async function fetchSolarActivity() {
+    const solarContent = document.getElementById('solar-activity-content');
+    const solarError = document.getElementById('solar-activity-error');
+
+    const endpoints = {
+        f107: 'https://services.swpc.noaa.gov/json/f107_cm_flux.json',
+        solarRadio: 'https://services.swpc.noaa.gov/json/solar-radio-flux.json',
+        proton: 'https://services.swpc.noaa.gov/json/goes/primary/5m_proton_flux.json',
+        xray: 'https://services.swpc.noaa.gov/json/goes/xray/5m.json',
+        solarWind: 'https://services.swpc.noaa.gov/json/ace/solar_wind/1-day.json'
+    };
+
+    try {
+        solarContent.innerHTML = '<div class="loading">Kraunama...</div>';
+        solarError.textContent = '';
+
+        const [f107Data, radioData, protonData, xrayData, solarWindData] = await Promise.all([
+            fetchNoaaJson(endpoints.f107),
+            fetchNoaaJson(endpoints.solarRadio),
+            fetchNoaaJson(endpoints.proton),
+            fetchNoaaJson(endpoints.xray),
+            fetchNoaaJson(endpoints.solarWind)
+        ]);
+
+        const f107Record = getLatestArrayEntry(f107Data);
+        const radioRecord = getLatestArrayEntry(radioData);
+        const protonRecord = getLatestArrayEntry(protonData);
+        const xrayRecord = getLatestArrayEntry(xrayData);
+        const solarWindRecord = getLatestArrayEntry(solarWindData);
+
+        const f107Value = getNumericValue(f107Record, ['f107', 'f107_cm_flux', 'flux']);
+        const radioValue = getNumericValue(radioRecord, ['flux', 'f10_7', 'f107', 'observed_flux']);
+        const protonValue = getNumericValue(protonRecord, ['flux', 'proton_flux', 'integral_flux']);
+        const xrayValue = getNumericValue(xrayRecord, ['flux', 'observed_flux', 'xray_flux']);
+        const solarWindSpeed = getNumericValue(solarWindRecord, ['speed', 'sw_speed', 'velocity']);
+        const solarWindDensity = getNumericValue(solarWindRecord, ['density', 'proton_density', 'n']);
+
+        displaySolarActivity({
+            f107Value,
+            radioValue,
+            protonValue,
+            xrayValue,
+            solarWindSpeed,
+            solarWindDensity
+        });
+    } catch (error) {
+        console.error('Saulės aktyvumo API klaida:', error);
+        solarContent.innerHTML = '<div class="solar-empty">Saulės aktyvumo duomenų įkelti nepavyko.</div>';
+        solarError.textContent = 'NOAA API laikinai nepasiekiamas.';
+    }
+}
+
+function displaySolarActivity(data) {
+    const solarContent = document.getElementById('solar-activity-content');
+
+    solarContent.innerHTML = `
+        <div class="solar-activity-info">
+            <p><strong>F10.7:</strong> ${formatMetric(data.f107Value, 1)} sfu</p>
+            <p><strong>Radijo srautas:</strong> ${formatMetric(data.radioValue, 1)} sfu</p>
+            <p><strong>Protonų srautas:</strong> ${formatMetric(data.protonValue, 3)}</p>
+            <p><strong>Rentgeno srautas:</strong> ${formatMetric(data.xrayValue, 6)} W/m²</p>
+            <p><strong>Vėjo greitis:</strong> ${formatMetric(data.solarWindSpeed, 1)} km/s</p>
+            <p><strong>Vėjo tankis:</strong> ${formatMetric(data.solarWindDensity, 2)} p/cm³</p>
         </div>
     `;
 }

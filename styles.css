@@ -130,6 +130,12 @@ body {
     min-width: 220px;
 }
 
+.space-weather-row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+}
+
 .header h2 {
     color: #667eea;
     font-size: 26px;
@@ -327,6 +333,46 @@ body {
     align-items: stretch;
 }
 
+.solar-activity-panel {
+    padding: 8px;
+    background: linear-gradient(135deg, #ff8a00 0%, #e52e71 100%);
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(229, 46, 113, 0.3);
+}
+
+.solar-activity-compact {
+    width: 260px;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+}
+
+.solar-activity-content {
+    background: white;
+    border-radius: 10px;
+    padding: 8px;
+    min-height: 96px;
+}
+
+.solar-activity-info p {
+    margin: 2px 0;
+    font-size: 11px;
+    color: #333;
+}
+
+.solar-activity-info strong {
+    color: #e52e71;
+}
+
+.solar-empty {
+    text-align: center;
+    color: #666;
+    font-size: 12px;
+    padding: 12px 8px;
+}
+
 .moon-phase-panel h3 {
     color: white;
     margin-bottom: 15px;
@@ -414,9 +460,15 @@ body {
     }
 
     .header-greeting,
-    .moon-phase-compact {
+    .space-weather-row,
+    .moon-phase-compact,
+    .solar-activity-compact {
         min-width: 0;
         width: 100%;
+    }
+
+    .space-weather-row {
+        flex-direction: column;
     }
 
     .stats-panel {

@@ -40,11 +40,19 @@
                 <div class="header-greeting">
                     <h2>Sveiki, <span id="current-username"></span>!</h2>
                 </div>
-                <div class="moon-phase-panel moon-phase-compact">
-                    <div id="moon-phase-content" class="moon-phase-content">
-                        <div class="loading">Kraunama...</div>
+                <div class="space-weather-row">
+                    <div class="moon-phase-panel moon-phase-compact">
+                        <div id="moon-phase-content" class="moon-phase-content">
+                            <div class="loading">Kraunama...</div>
+                        </div>
+                        <div id="moon-phase-error" class="error-message"></div>
                     </div>
-                    <div id="moon-phase-error" class="error-message"></div>
+                    <div class="solar-activity-panel solar-activity-compact">
+                        <div id="solar-activity-content" class="solar-activity-content">
+                            <div class="loading">Kraunama...</div>
+                        </div>
+                        <div id="solar-activity-error" class="error-message"></div>
+                    </div>
                 </div>
                 <button onclick="logout()" class="logout-btn">Atsijungti</button>
             </div>
