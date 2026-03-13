@@ -1,7 +1,8 @@
 const ENDPOINTS = {
-    f107: 'https://services.swpc.noaa.gov/json/f107_cm_flux.json',
-    xray: 'https://services.swpc.noaa.gov/json/goes/xray/5m.json',
-    solarWind: 'https://services.swpc.noaa.gov/json/ace/solar_wind/1-day.json'
+    solarRadioFlux: 'https://services.swpc.noaa.gov/json/solar-radio-flux.json',
+    observedSsn: 'https://services.swpc.noaa.gov/json/solar-cycle/swpc_observed_ssn.json',
+    predictedCycle: 'https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json',
+    electronFluenceForecast: 'https://services.swpc.noaa.gov/json/electron_fluence_forecast.json'
 };
 
 async function fetchWithTimeout(url, timeoutMs = 8000) {
@@ -53,6 +54,38 @@ function getNumericValue(record, keys) {
     return null;
 }
 
+function getSolarRadioFlux2695(record) {
+    if (!record || !Array.isArray(record.details)) {
+        return null;
+    }
+
+    const preferred = record.details.find((entry) => Number(entry.frequency) === 2695);
+    if (preferred) {
+        const preferredValue = Number(preferred.flux);
+        if (Number.isFinite(preferredValue)) {
+            return preferredValue;
+        }
+    }
+
+    const fallback = record.details.find((entry) => Number.isFinite(Number(entry.flux)));
+    return fallback ? Number(fallback.flux) : null;
+}
+
+function getPredictedCycleCurrentRecord(payload) {
+    if (!Array.isArray(payload) || payload.length === 0) {
+        return null;
+    }
+
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const currentRecord = payload.find((entry) => entry && entry['time-tag'] === currentMonth);
+
+    if (currentRecord) {
+        return currentRecord;
+    }
+
+    return payload[payload.length - 1] || null;
+}
+
 module.exports = async (request, response) => {
     response.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
 
@@ -90,14 +123,18 @@ module.exports = async (request, response) => {
         }
     }
 
-    const f107Record = getLatestArrayEntry(payloadByName.f107);
-    const xrayRecord = getLatestArrayEntry(payloadByName.xray);
-    const solarWindRecord = getLatestArrayEntry(payloadByName.solarWind);
+    const solarRadioFluxRecord = getLatestArrayEntry(payloadByName.solarRadioFlux);
+    const observedSsnRecord = getLatestArrayEntry(payloadByName.observedSsn);
+    const predictedCycleRecord = getPredictedCycleCurrentRecord(payloadByName.predictedCycle);
+    const electronFluenceRecord = getLatestArrayEntry(payloadByName.electronFluenceForecast);
 
     const metrics = {
-        f107Value: getNumericValue(f107Record, ['f107', 'f107_cm_flux', 'flux']),
-        xrayValue: getNumericValue(xrayRecord, ['flux', 'observed_flux', 'xray_flux']),
-        solarWindSpeed: getNumericValue(solarWindRecord, ['speed', 'sw_speed', 'velocity'])
+        solarRadioFlux2695: getSolarRadioFlux2695(solarRadioFluxRecord),
+        observedSsn: getNumericValue(observedSsnRecord, ['swpc_ssn']),
+        predictedSsn: getNumericValue(predictedCycleRecord, ['predicted_ssn']),
+        predictedF107: getNumericValue(predictedCycleRecord, ['predicted_f10.7']),
+        electronFluence: getNumericValue(electronFluenceRecord, ['fluence']),
+        electronForecastSpeed: getNumericValue(electronFluenceRecord, ['speed'])
     };
 
     const availableSources = Object.values(sourceStatus).filter((entry) => entry.ok).length;

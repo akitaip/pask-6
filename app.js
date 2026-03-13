@@ -417,7 +417,7 @@ async function fetchSolarActivity() {
         const payload = await response.json();
         const metrics = payload.metrics || {};
         const availableSources = Number.isFinite(payload.availableSources) ? payload.availableSources : 0;
-        const totalSources = Number.isFinite(payload.totalSources) ? payload.totalSources : 3;
+        const totalSources = Number.isFinite(payload.totalSources) ? payload.totalSources : 4;
 
         displaySolarActivity(metrics, availableSources, totalSources);
 
@@ -436,9 +436,12 @@ function displaySolarActivity(data, availableSources, totalSources) {
 
     solarContent.innerHTML = `
         <div class="solar-activity-info">
-            <p><strong>F10.7:</strong> ${formatMetric(data.f107Value, 1)} sfu</p>
-            <p><strong>Rentgeno srautas:</strong> ${formatMetric(data.xrayValue, 6)} W/m²</p>
-            <p><strong>Vėjo greitis:</strong> ${formatMetric(data.solarWindSpeed, 1)} km/s</p>
+            <p><strong>Radio flux (2695):</strong> ${formatMetric(data.solarRadioFlux2695, 1)} sfu</p>
+            <p><strong>Observed SSN:</strong> ${formatMetric(data.observedSsn, 1)}</p>
+            <p><strong>Predicted SSN:</strong> ${formatMetric(data.predictedSsn, 1)}</p>
+            <p><strong>Predicted F10.7:</strong> ${formatMetric(data.predictedF107, 1)} sfu</p>
+            <p><strong>Electron fluence:</strong> ${formatMetric(data.electronFluence, 0)}</p>
+            <p><strong>Forecast speed:</strong> ${formatMetric(data.electronForecastSpeed, 1)} km/s</p>
             <p><strong>Šaltiniai:</strong> ${availableSources}/${totalSources}</p>
         </div>
     `;
