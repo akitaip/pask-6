@@ -10,7 +10,7 @@ const DEFAULT_USER_STATS = {
     currentCoefficient: 0.01
 };
 
-let supabase = null;
+let supabaseClient = null;
 let authSubscription = null;
 let appRedirectBaseUrl = '';
 let pendingAuthSuccessMessage = '';
@@ -65,7 +65,7 @@ async function initializeApp() {
 }
 
 function setupAuthStateListener() {
-    if (!supabase) {
+    if (!supabaseClient) {
         return;
     }
 
@@ -74,7 +74,7 @@ function setupAuthStateListener() {
         authSubscription = null;
     }
 
-    const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
         if (event === 'SIGNED_OUT') {
             resetGameState();
             showAuthSection();
@@ -111,7 +111,7 @@ async function initializeSupabase() {
 
     appRedirectBaseUrl = config.appUrl || '';
 
-    supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
         auth: {
             persistSession: true,
             autoRefreshToken: true,
@@ -164,7 +164,7 @@ function showTab(tab) {
 }
 
 async function checkAuth() {
-    let { data, error } = await supabase.auth.getSession();
+    let { data, error } = await supabaseClient.auth.getSession();
     if (error) {
         throw error;
     }
@@ -175,7 +175,7 @@ async function checkAuth() {
 
     if (!session?.user && hasAuthHash) {
         await new Promise((resolve) => setTimeout(resolve, 200));
-        ({ data, error } = await supabase.auth.getSession());
+        ({ data, error } = await supabaseClient.auth.getSession());
         if (error) {
             throw error;
         }
@@ -220,7 +220,7 @@ async function hydrateCurrentUserProfile() {
         return;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('profiles')
         .select('username')
         .eq('id', gameState.currentUser.id)
@@ -458,7 +458,7 @@ async function register() {
         setAuthBusy(true);
         showError('');
 
-        const { data, error } = await supabase.auth.signUp({
+        const { data, error } = await supabaseClient.auth.signUp({
             email,
             password,
             options: {
@@ -508,7 +508,7 @@ async function login() {
         setAuthBusy(true);
         showError('');
 
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
             email,
             password
         });
@@ -534,7 +534,7 @@ async function loginWithGoogle() {
         setAuthBusy(true);
         showError('');
 
-        const { error } = await supabase.auth.signInWithOAuth({
+        const { error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
                 redirectTo: getEmailRedirectUrl()
@@ -557,7 +557,7 @@ async function logout() {
             await saveUserStats();
         }
 
-        await supabase.auth.signOut();
+        await supabaseClient.auth.signOut();
     } catch (error) {
         console.error('Atsijungimo klaida:', error);
     } finally {
@@ -826,12 +826,12 @@ async function loadUserData() {
     }
 
     const [guessesResult, statsResult] = await Promise.all([
-        supabase
+        supabaseClient
             .from('guesses')
             .select('created_at, coefficient, points, guessed_number, target_number, guessed_row, target_row, guessed_col, target_col')
             .eq('user_id', gameState.currentUser.id)
             .order('created_at', { ascending: true }),
-        supabase
+        supabaseClient
             .from('user_stats')
             .select('streak, current_coefficient')
             .eq('user_id', gameState.currentUser.id)
@@ -882,7 +882,7 @@ async function saveGuess(guess) {
         return;
     }
 
-    const { error } = await supabase
+    const { error } = await supabaseClient
         .from('guesses')
         .insert({
             user_id: gameState.currentUser.id,
@@ -907,7 +907,7 @@ async function saveUserStats() {
         return;
     }
 
-    const { error } = await supabase
+    const { error } = await supabaseClient
         .from('user_stats')
         .upsert({
             user_id: gameState.currentUser.id,
