@@ -2,7 +2,8 @@ const ENDPOINTS = {
     solarRadioFlux: 'https://services.swpc.noaa.gov/json/solar-radio-flux.json',
     observedSsn: 'https://services.swpc.noaa.gov/json/solar-cycle/swpc_observed_ssn.json',
     predictedCycle: 'https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json',
-    electronFluenceForecast: 'https://services.swpc.noaa.gov/json/electron_fluence_forecast.json'
+    electronFluenceForecast: 'https://services.swpc.noaa.gov/json/electron_fluence_forecast.json',
+    kpForecast: 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json'
 };
 
 async function fetchWithTimeout(url, timeoutMs = 8000) {
@@ -86,6 +87,40 @@ function getPredictedCycleCurrentRecord(payload) {
     return payload[payload.length - 1] || null;
 }
 
+function parseKpForecast(payload) {
+    if (!Array.isArray(payload) || payload.length < 2) {
+        return {
+            labels: [],
+            observed: [],
+            estimated: []
+        };
+    }
+
+    const rows = payload
+        .slice(1)
+        .filter((row) => Array.isArray(row) && row.length >= 3)
+        .map((row) => {
+            const timeTag = String(row[0] || '');
+            const kp = Number(row[1]);
+            const type = String(row[2] || '').toLowerCase();
+
+            return {
+                timeTag,
+                kp,
+                type
+            };
+        })
+        .filter((row) => row.timeTag && Number.isFinite(row.kp));
+
+    const recentRows = rows.slice(-40);
+
+    return {
+        labels: recentRows.map((row) => row.timeTag.slice(5, 16)),
+        observed: recentRows.map((row) => (row.type === 'observed' ? row.kp : null)),
+        estimated: recentRows.map((row) => (row.type !== 'observed' ? row.kp : null))
+    };
+}
+
 module.exports = async (request, response) => {
     response.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
 
@@ -127,6 +162,7 @@ module.exports = async (request, response) => {
     const observedSsnRecord = getLatestArrayEntry(payloadByName.observedSsn);
     const predictedCycleRecord = getPredictedCycleCurrentRecord(payloadByName.predictedCycle);
     const electronFluenceRecord = getLatestArrayEntry(payloadByName.electronFluenceForecast);
+    const kpForecast = parseKpForecast(payloadByName.kpForecast);
 
     const metrics = {
         solarRadioFlux2695: getSolarRadioFlux2695(solarRadioFluxRecord),
@@ -141,6 +177,7 @@ module.exports = async (request, response) => {
 
     return response.status(200).json({
         metrics,
+        kpForecast,
         sourceStatus,
         availableSources,
         totalSources: Object.keys(ENDPOINTS).length,

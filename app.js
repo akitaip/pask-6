@@ -31,6 +31,7 @@ let gameState = {
 };
 
 let coefficientChart = null;
+let kpForecastChart = null;
 
 window.showTab = showTab;
 window.register = register;
@@ -236,6 +237,7 @@ async function hydrateCurrentUserProfile() {
 function showAuthSection() {
     stopGameCycle();
     destroyChart();
+    destroyKpForecastChart();
     document.getElementById('auth-section').classList.remove('hidden');
     document.getElementById('game-section').classList.add('hidden');
 }
@@ -416,10 +418,12 @@ async function fetchSolarActivity() {
 
         const payload = await response.json();
         const metrics = payload.metrics || {};
+        const kpForecast = payload.kpForecast || { labels: [], observed: [], estimated: [] };
         const availableSources = Number.isFinite(payload.availableSources) ? payload.availableSources : 0;
-        const totalSources = Number.isFinite(payload.totalSources) ? payload.totalSources : 4;
+        const totalSources = Number.isFinite(payload.totalSources) ? payload.totalSources : 5;
 
         displaySolarActivity(metrics, availableSources, totalSources);
+        renderKpForecastChart(kpForecast);
 
         if (availableSources < totalSources) {
             solarError.textContent = `Dalis NOAA šaltinių nepasiekiami (${availableSources}/${totalSources}).`;
@@ -427,6 +431,7 @@ async function fetchSolarActivity() {
     } catch (error) {
         console.error('Saulės aktyvumo API klaida:', error);
         solarContent.innerHTML = '<div class="solar-empty">Saulės aktyvumo duomenų įkelti nepavyko.</div>';
+        destroyKpForecastChart();
         solarError.textContent = 'Space weather API laikinai nepasiekiamas.';
     }
 }
@@ -445,6 +450,99 @@ function displaySolarActivity(data, availableSources, totalSources) {
             <p><strong>Šaltiniai:</strong> ${availableSources}/${totalSources}</p>
         </div>
     `;
+}
+
+function destroyKpForecastChart() {
+    if (kpForecastChart) {
+        kpForecastChart.destroy();
+        kpForecastChart = null;
+    }
+}
+
+function renderKpForecastChart(kpForecast) {
+    const chartCanvas = document.getElementById('kp-forecast-chart');
+    if (!chartCanvas || !window.Chart) {
+        return;
+    }
+
+    const labels = Array.isArray(kpForecast.labels) ? kpForecast.labels : [];
+    const observed = Array.isArray(kpForecast.observed) ? kpForecast.observed : [];
+    const estimated = Array.isArray(kpForecast.estimated) ? kpForecast.estimated : [];
+
+    destroyKpForecastChart();
+
+    if (labels.length === 0) {
+        return;
+    }
+
+    const ctx = chartCanvas.getContext('2d');
+    kpForecastChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Kp observed',
+                    data: observed,
+                    borderColor: 'rgb(102, 126, 234)',
+                    backgroundColor: 'rgba(102, 126, 234, 0.15)',
+                    tension: 0.25,
+                    pointRadius: 1,
+                    spanGaps: true
+                },
+                {
+                    label: 'Kp estimated',
+                    data: estimated,
+                    borderColor: 'rgb(229, 46, 113)',
+                    backgroundColor: 'rgba(229, 46, 113, 0.15)',
+                    borderDash: [5, 4],
+                    tension: 0.25,
+                    pointRadius: 1,
+                    spanGaps: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            },
+            scales: {
+                y: {
+                    min: 0,
+                    max: 9,
+                    ticks: {
+                        stepSize: 3,
+                        font: {
+                            size: 9
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0,0,0,0.08)'
+                    }
+                },
+                x: {
+                    ticks: {
+                        maxTicksLimit: 6,
+                        font: {
+                            size: 9
+                        }
+                    },
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
 }
 
 async function register() {
