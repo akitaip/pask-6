@@ -341,8 +341,24 @@ body {
 }
 
 .solar-activity-compact {
-    width: 260px;
-    min-width: 260px;
+    width: 250px;
+    min-width: 250px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+}
+
+.kp-forecast-panel {
+    padding: 8px;
+    background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0, 176, 155, 0.3);
+}
+
+.kp-forecast-compact {
+    width: 250px;
+    min-width: 250px;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -357,7 +373,6 @@ body {
 }
 
 .kp-chart-container {
-    margin-top: 8px;
     background: white;
     border-radius: 10px;
     padding: 6px;
@@ -475,7 +490,8 @@ body {
     .header-greeting,
     .space-weather-row,
     .moon-phase-compact,
-    .solar-activity-compact {
+    .solar-activity-compact,
+    .kp-forecast-compact {
         min-width: 0;
         width: 100%;
     }
