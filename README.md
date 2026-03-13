@@ -17,6 +17,9 @@ Frontend žaidimas su Supabase autentifikacija, Supabase duomenų saugojimu ir V
 3. Įvykdykite SQL iš `supabase/schema.sql`.
 4. Auth nustatymuose įjunkite `Email` provider.
 5. Jei norite sklandesnio testo be patvirtinimo laiškų, laikinai išjunkite `Confirm email`.
+6. Supabase `Authentication -> URL Configuration` nustatykite:
+	- `Site URL`: jūsų realus app adresas (pvz. `https://jusu-projektas.vercel.app`)
+	- `Redirect URLs`: pridėkite visus naudojamus adresus (pvz. `http://localhost:3000`, `https://jusu-projektas.vercel.app`)
 
 ## Reikalingi Vercel aplinkos kintamieji
 
@@ -24,15 +27,19 @@ Vercel projekte pridėkite šiuos Environment Variables:
 
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
+- `APP_URL` (rekomenduojama, pvz. `https://jusu-projektas.vercel.app`)
 
 Galite juos pridėti per Vercel Dashboard arba CLI:
 
 ```powershell
 vercel env add SUPABASE_URL
 vercel env add SUPABASE_ANON_KEY
+vercel env add APP_URL
 ```
 
 Po pakeitimų perleiskite deploy.
+
+`APP_URL` naudojamas registracijos patvirtinimo nuorodai (`redirect_to`), kad po el. pašto patvirtinimo būtų atidaromas Vercel adresas, o ne `localhost`.
 
 ## Lokalus paleidimas
 

@@ -10,6 +10,9 @@ const DEFAULT_USER_STATS = {
 };
 
 let supabase = null;
+let authSubscription = null;
+let appRedirectBaseUrl = '';
+let pendingAuthSuccessMessage = '';
 
 let gameState = {
     currentUser: null,
@@ -31,6 +34,7 @@ let coefficientChart = null;
 window.showTab = showTab;
 window.register = register;
 window.login = login;
+window.loginWithGoogle = loginWithGoogle;
 window.logout = logout;
 
 if (document.readyState === 'loading') {
@@ -43,6 +47,7 @@ async function initializeApp() {
     try {
         setAuthBusy(true);
         await initializeSupabase();
+        setupAuthStateListener();
         setupEventListeners();
         await checkAuth();
     } catch (error) {
@@ -52,6 +57,37 @@ async function initializeApp() {
     } finally {
         setAuthBusy(false);
     }
+}
+
+function setupAuthStateListener() {
+    if (!supabase) {
+        return;
+    }
+
+    if (authSubscription) {
+        authSubscription.unsubscribe();
+        authSubscription = null;
+    }
+
+    const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_OUT') {
+            resetGameState();
+            showAuthSection();
+            showTab('login');
+            showError('');
+            return;
+        }
+
+        if (!session?.user) {
+            return;
+        }
+
+        gameState.currentUser = session.user;
+        await hydrateCurrentUserProfile();
+        await showGameSection();
+    });
+
+    authSubscription = data.subscription;
 }
 
 async function initializeSupabase() {
@@ -67,6 +103,8 @@ async function initializeSupabase() {
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
         throw new Error('Nerasti SUPABASE_URL arba SUPABASE_ANON_KEY');
     }
+
+    appRedirectBaseUrl = config.appUrl || '';
 
     supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
         auth: {
@@ -121,20 +159,54 @@ function showTab(tab) {
 }
 
 async function checkAuth() {
-    const { data, error } = await supabase.auth.getSession();
+    let { data, error } = await supabase.auth.getSession();
     if (error) {
         throw error;
     }
 
-    const session = data.session;
+    let session = data.session;
+    const hasAuthHash = window.location.hash.includes('access_token=') || window.location.hash.includes('refresh_token=');
+    const isSignupVerification = window.location.hash.includes('type=signup');
+
+    if (!session?.user && hasAuthHash) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        ({ data, error } = await supabase.auth.getSession());
+        if (error) {
+            throw error;
+        }
+        session = data.session;
+    }
+
     if (!session?.user) {
+        if (isSignupVerification) {
+            showError('El. paštas patvirtintas. Prisijunkite su savo el. paštu ir slaptažodžiu.', 'success');
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        }
         showAuthSection();
         return;
+    }
+
+    if (isSignupVerification) {
+        pendingAuthSuccessMessage = 'El. paštas patvirtintas sėkmingai. Galite naudotis programa.';
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
     }
 
     gameState.currentUser = session.user;
     await hydrateCurrentUserProfile();
     await showGameSection();
+}
+
+function getEmailRedirectUrl() {
+    const fallbackUrl = `${window.location.origin}${window.location.pathname}`;
+    if (!appRedirectBaseUrl) {
+        return fallbackUrl;
+    }
+
+    const normalizedBase = appRedirectBaseUrl.endsWith('/')
+        ? appRedirectBaseUrl.slice(0, -1)
+        : appRedirectBaseUrl;
+
+    return `${normalizedBase}${window.location.pathname}`;
 }
 
 async function hydrateCurrentUserProfile() {
@@ -174,6 +246,11 @@ async function showGameSection() {
     startGameCycle();
     initializeChart();
     fetchMoonPhase();
+
+    if (pendingAuthSuccessMessage) {
+        alert(pendingAuthSuccessMessage);
+        pendingAuthSuccessMessage = '';
+    }
 }
 
 function calculateMoonPhase() {
@@ -306,6 +383,7 @@ async function register() {
             email,
             password,
             options: {
+                emailRedirectTo: getEmailRedirectUrl(),
                 data: {
                     username
                 }
@@ -368,6 +446,28 @@ async function login() {
         console.error('Prisijungimo klaida:', error);
         showError(normalizeAuthError(error.message || 'Prisijungimas nepavyko'));
     } finally {
+        setAuthBusy(false);
+    }
+}
+
+async function loginWithGoogle() {
+    try {
+        setAuthBusy(true);
+        showError('');
+
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: getEmailRedirectUrl()
+            }
+        });
+
+        if (error) {
+            throw error;
+        }
+    } catch (error) {
+        console.error('Google prisijungimo klaida:', error);
+        showError(normalizeAuthError(error.message || 'Google prisijungimas nepavyko'));
         setAuthBusy(false);
     }
 }
