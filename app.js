@@ -1,4 +1,5 @@
-const { createClient } = window.supabase || {};
+const supabaseBrowser = window.supabase || {};
+const { createClient } = supabaseBrowser;
 
 const SUPABASE_CONFIG_ENDPOINT = '/api/config';
 const BOARD_ROWS = 5;
