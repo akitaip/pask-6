@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const { createClient } = window.supabase || {};
 
 const SUPABASE_CONFIG_ENDPOINT = '/api/config';
 const BOARD_ROWS = 5;
@@ -45,6 +45,10 @@ if (document.readyState === 'loading') {
 
 async function initializeApp() {
     try {
+        if (typeof createClient !== 'function') {
+            throw new Error('Supabase browser bundle neįkeltas');
+        }
+
         setAuthBusy(true);
         await initializeSupabase();
         setupAuthStateListener();
