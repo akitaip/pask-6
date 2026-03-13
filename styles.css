@@ -118,7 +118,7 @@ body {
 
 .header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     gap: 16px;
     margin-bottom: 14px;
@@ -127,12 +127,14 @@ body {
 }
 
 .header-greeting {
-    min-width: 220px;
+    min-width: 150px;
 }
 
 .space-weather-row {
     display: flex;
     align-items: stretch;
+    flex: 1;
+    justify-content: flex-start;
     gap: 10px;
 }
 
@@ -141,7 +143,17 @@ body {
     font-size: 26px;
 }
 
+.greeting-title {
+    line-height: 1.15;
+}
+
+.greeting-title span {
+    display: inline-block;
+    margin-top: 2px;
+}
+
 .logout-btn {
+    margin-left: auto;
     padding: 8px 16px;
     background: #e74c3c;
     color: white;
@@ -365,6 +377,22 @@ body {
     align-items: stretch;
 }
 
+.kp-raw-forecast-panel {
+    padding: 8px;
+    background: linear-gradient(135deg, #5a67d8 0%, #4299e1 100%);
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(66, 153, 225, 0.3);
+}
+
+.kp-raw-forecast-compact {
+    width: 250px;
+    min-width: 250px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+}
+
 .solar-activity-content {
     background: white;
     border-radius: 10px;
@@ -377,6 +405,15 @@ body {
     border-radius: 10px;
     padding: 6px;
     height: 120px;
+}
+
+.chart-caption {
+    margin-top: 6px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    line-height: 1.2;
 }
 
 #kp-forecast-chart {
@@ -491,7 +528,8 @@ body {
     .space-weather-row,
     .moon-phase-compact,
     .solar-activity-compact,
-    .kp-forecast-compact {
+    .kp-forecast-compact,
+    .kp-raw-forecast-compact {
         min-width: 0;
         width: 100%;
     }

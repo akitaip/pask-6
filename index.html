@@ -8,7 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="loading-app">
+<body>
     <div class="container">
         <!-- Registracijos/Prisijungimo forma -->
         <div id="auth-section" class="auth-section">
@@ -39,7 +39,7 @@
         <div id="game-section" class="game-section hidden">
             <div class="header">
                 <div class="header-greeting">
-                    <h2>Sveiki, <span id="current-username"></span>!</h2>
+                    <h2 class="greeting-title">Sveiki,<br><span id="current-username"></span>!</h2>
                 </div>
                 <div class="space-weather-row">
                     <div class="moon-phase-panel moon-phase-compact">
@@ -47,17 +47,26 @@
                             <div class="loading">Kraunama...</div>
                         </div>
                         <div id="moon-phase-error" class="error-message"></div>
+                        <div class="chart-caption">Mėnulio padėtis</div>
                     </div>
                     <div class="solar-activity-panel solar-activity-compact">
                         <div id="solar-activity-content" class="solar-activity-content">
                             <div class="loading">Kraunama...</div>
                         </div>
                         <div id="solar-activity-error" class="error-message"></div>
+                        <div class="chart-caption">NOAA API "saulės aktyvumas"</div>
                     </div>
                     <div class="kp-forecast-panel kp-forecast-compact">
                         <div class="kp-chart-container">
                             <canvas id="kp-forecast-chart"></canvas>
                         </div>
+                        <div class="chart-caption">Magnetinis aktyvumas</div>
+                    </div>
+                    <div class="kp-raw-forecast-panel kp-raw-forecast-compact">
+                        <div class="kp-chart-container">
+                            <canvas id="kp-raw-forecast-chart"></canvas>
+                        </div>
+                        <div class="chart-caption">Saulės aktyvumo prognozė</div>
                     </div>
                 </div>
                 <button onclick="logout()" class="logout-btn">Atsijungti</button>

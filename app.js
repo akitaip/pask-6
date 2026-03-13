@@ -32,6 +32,7 @@ let gameState = {
 
 let coefficientChart = null;
 let kpForecastChart = null;
+let kpRawForecastChart = null;
 
 window.showTab = showTab;
 window.register = register;
@@ -51,7 +52,6 @@ async function initializeApp() {
             throw new Error('Supabase browser bundle neįkeltas');
         }
 
-        setAuthBusy(true);
         await initializeSupabase();
         setupAuthStateListener();
         setupEventListeners();
@@ -97,8 +97,14 @@ function setupAuthStateListener() {
 }
 
 async function initializeSupabase() {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(SUPABASE_CONFIG_ENDPOINT, {
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: controller.signal
+    }).finally(() => {
+        clearTimeout(timeoutId);
     });
 
     if (!response.ok) {
@@ -238,6 +244,7 @@ function showAuthSection() {
     stopGameCycle();
     destroyChart();
     destroyKpForecastChart();
+    destroyKpRawForecastChart();
     document.getElementById('auth-section').classList.remove('hidden');
     document.getElementById('game-section').classList.add('hidden');
 }
@@ -424,6 +431,7 @@ async function fetchSolarActivity() {
 
         displaySolarActivity(metrics, availableSources, totalSources);
         renderKpForecastChart(kpForecast);
+        renderKpRawForecastChart(kpForecast);
 
         if (availableSources < totalSources) {
             solarError.textContent = `Dalis NOAA šaltinių nepasiekiami (${availableSources}/${totalSources}).`;
@@ -432,6 +440,7 @@ async function fetchSolarActivity() {
         console.error('Saulės aktyvumo API klaida:', error);
         solarContent.innerHTML = '<div class="solar-empty">Saulės aktyvumo duomenų įkelti nepavyko.</div>';
         destroyKpForecastChart();
+        destroyKpRawForecastChart();
         solarError.textContent = 'Space weather API laikinai nepasiekiamas.';
     }
 }
@@ -441,12 +450,10 @@ function displaySolarActivity(data, availableSources, totalSources) {
 
     solarContent.innerHTML = `
         <div class="solar-activity-info">
-            <p><strong>Radio flux (2695):</strong> ${formatMetric(data.solarRadioFlux2695, 1)} sfu</p>
-            <p><strong>Observed SSN:</strong> ${formatMetric(data.observedSsn, 1)}</p>
-            <p><strong>Predicted SSN:</strong> ${formatMetric(data.predictedSsn, 1)}</p>
-            <p><strong>Predicted F10.7:</strong> ${formatMetric(data.predictedF107, 1)} sfu</p>
-            <p><strong>Electron fluence:</strong> ${formatMetric(data.electronFluence, 0)}</p>
-            <p><strong>Forecast speed:</strong> ${formatMetric(data.electronForecastSpeed, 1)} km/s</p>
+            <p><strong>Saulės radijo srautas:</strong> ${formatMetric(data.solarRadioFlux2695, 1)} sfu</p>
+            <p><strong>Matuotos saulės dėmės:</strong> ${formatMetric(data.observedSsn, 1)}</p>
+            <p><strong>Saulės ciklo prognozė:</strong> SSN ${formatMetric(data.predictedSsn, 1)} | F10.7 ${formatMetric(data.predictedF107, 1)} sfu</p>
+            <p><strong>Elektronų audros prognozė:</strong> ${formatMetric(data.electronFluence, 0)} | ${formatMetric(data.electronForecastSpeed, 1)} km/s</p>
             <p><strong>Šaltiniai:</strong> ${availableSources}/${totalSources}</p>
         </div>
     `;
@@ -456,6 +463,13 @@ function destroyKpForecastChart() {
     if (kpForecastChart) {
         kpForecastChart.destroy();
         kpForecastChart = null;
+    }
+}
+
+function destroyKpRawForecastChart() {
+    if (kpRawForecastChart) {
+        kpRawForecastChart.destroy();
+        kpRawForecastChart = null;
     }
 }
 
@@ -513,6 +527,107 @@ function renderKpForecastChart(kpForecast) {
                 tooltip: {
                     mode: 'index',
                     intersect: false
+                }
+            },
+            scales: {
+                y: {
+                    min: 0,
+                    max: 9,
+                    ticks: {
+                        stepSize: 3,
+                        font: {
+                            size: 9
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0,0,0,0.08)'
+                    }
+                },
+                x: {
+                    ticks: {
+                        maxTicksLimit: 6,
+                        font: {
+                            size: 9
+                        }
+                    },
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderKpRawForecastChart(kpForecast) {
+    const chartCanvas = document.getElementById('kp-raw-forecast-chart');
+    if (!chartCanvas || !window.Chart) {
+        return;
+    }
+
+    const labels = Array.isArray(kpForecast.labels) ? kpForecast.labels : [];
+    const observed = Array.isArray(kpForecast.observed) ? kpForecast.observed : [];
+    const estimated = Array.isArray(kpForecast.estimated) ? kpForecast.estimated : [];
+
+    const rows = labels
+        .map((label, index) => {
+            const observedValue = Number(observed[index]);
+            const estimatedValue = Number(estimated[index]);
+
+            if (Number.isFinite(observedValue)) {
+                return { label, value: observedValue, type: 'observed' };
+            }
+
+            if (Number.isFinite(estimatedValue)) {
+                return { label, value: estimatedValue, type: 'estimated' };
+            }
+
+            return null;
+        })
+        .filter((row) => row !== null)
+        .slice(-20);
+
+    destroyKpRawForecastChart();
+
+    if (rows.length === 0) {
+        return;
+    }
+
+    const ctx = chartCanvas.getContext('2d');
+    kpRawForecastChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: rows.map((row) => row.label),
+            datasets: [
+                {
+                    label: 'Kp (paskutiniai 20)',
+                    data: rows.map((row) => row.value),
+                    borderColor: 'rgb(68, 114, 196)',
+                    backgroundColor: 'rgba(68, 114, 196, 0.15)',
+                    pointBackgroundColor: rows.map((row) => (row.type === 'observed' ? 'rgb(68, 114, 196)' : 'rgb(255, 159, 64)')),
+                    pointRadius: 2,
+                    borderWidth: 2,
+                    tension: 0.25,
+                    spanGaps: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label(context) {
+                            const row = rows[context.dataIndex];
+                            const typeLabel = row?.type === 'observed' ? 'observed' : 'estimated';
+                            return `Kp: ${context.parsed.y} (${typeLabel})`;
+                        }
+                    }
                 }
             },
             scales: {
