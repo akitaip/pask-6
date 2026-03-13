@@ -244,13 +244,33 @@ async function showGameSection() {
     document.getElementById('game-section').classList.remove('hidden');
     document.getElementById('current-username').textContent = gameState.currentUsername;
 
-    await loadUserData();
+    try {
+        await loadUserData();
+    } catch (error) {
+        console.error('Nepavyko užkrauti vartotojo duomenų:', error);
+        gameState.guesses = [];
+        gameState.totalGuesses = 0;
+        gameState.currentCoefficient = DEFAULT_USER_STATS.currentCoefficient;
+        gameState.streak = DEFAULT_USER_STATS.streak;
+    }
+
     initializeGame();
     updateStats();
     startGameCycle();
-    initializeChart();
-    fetchMoonPhase();
-    fetchSolarActivity();
+
+    try {
+        initializeChart();
+    } catch (error) {
+        console.error('Nepavyko inicializuoti grafiko:', error);
+    }
+
+    fetchMoonPhase().catch((error) => {
+        console.error('Nepavyko užkrauti mėnulio fazės:', error);
+    });
+
+    fetchSolarActivity().catch((error) => {
+        console.error('Nepavyko užkrauti saulės aktyvumo:', error);
+    });
 
     if (pendingAuthSuccessMessage) {
         alert(pendingAuthSuccessMessage);
@@ -808,6 +828,7 @@ async function loadUserData() {
         supabase
             .from('guesses')
             .select('created_at, coefficient, points, guessed_number, target_number, guessed_row, target_row, guessed_col, target_col')
+            .eq('user_id', gameState.currentUser.id)
             .order('created_at', { ascending: true }),
         supabase
             .from('user_stats')
